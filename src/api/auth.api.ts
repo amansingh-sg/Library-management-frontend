@@ -20,3 +20,15 @@ export async function verifyEmail(uniqueKey: string): Promise<AuthSession & { me
   )
   return data
 }
+
+// POST /forgot-password -> 200, always the same response whether or not the email is
+// registered (avoids leaking which emails have accounts). Rate-limited 10 req/15min.
+export async function forgotPassword(email: string): Promise<void> {
+  await apiClient.post('/forgot-password', { email })
+}
+
+// POST /reset-password -> 200. Token is single-use and expires 30 minutes after
+// request. Rate-limited 10 req/15min.
+export async function resetPassword(token: string, password: string): Promise<void> {
+  await apiClient.post('/reset-password', { token, password })
+}

@@ -41,11 +41,11 @@ export default function BookDetailsPage() {
     setIsLoading(true)
     setError(null)
 
-    Promise.all([getBookById(id), getAuthors(), getMyFavourites()])
+    Promise.all([getBookById(id), getAuthors(), getMyFavourites({ perPage: 500 })])
       .then(([bookResult, authors, favourites]) => {
         setBook(bookResult)
         setAuthor(authors.find((a) => a.id === bookResult.authorId) ?? null)
-        setIsFavourite(favourites.some((f) => f.bookId === bookResult.id))
+        setIsFavourite(favourites.data.some((f) => f.bookId === bookResult.id))
       })
       .catch((err) => setError(getErrorMessage(err, 'Unable to load this book.')))
       .finally(() => setIsLoading(false))

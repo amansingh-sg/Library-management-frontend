@@ -11,10 +11,11 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { SkeletonTable } from '@/components/ui/Skeleton'
+import { Pagination } from '@/components/ui/Pagination'
 import { ReservationStatusBadge } from '@/components/common/StatusBadge'
 import { ReservationStatus } from '@/types/enums'
 import { formatDate, formatDateTime } from '@/utils/format'
-import type { Reservation } from '@/types/models'
+import type { PaginatedResponse, Reservation } from '@/types/models'
 
 function expiryHint(reservation: Reservation): string | null {
   if (reservation.status !== ReservationStatus.READY || !reservation.expiresAt) return null
@@ -25,24 +26,30 @@ function expiryHint(reservation: Reservation): string | null {
 }
 
 export default function MyReservationsPage() {
-  const [reservations, setReservations] = useState<Reservation[]>([])
+  const [page, setPage] = useState<PaginatedResponse<Reservation> | null>(null)
+  const [pageNumber, setPageNumber] = useState(1)
   const [bookTitleById, setBookTitleById] = useState<Map<string, string>>(new Map())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null)
 
+  const reservations = page?.data ?? []
+
   const load = useCallback(() => {
     setIsLoading(true)
     setError(null)
-    Promise.all([getMyReservations(), getBooks()])
+    // Books are fetched in full here (not paginated) — it's a title lookup map, not the
+    // list this page paginates.
+    Promise.all([getMyReservations({ page: pageNumber }), getBooks({}, { perPage: 500 })])
       .then(([reservationResult, books]) => {
-        setReservations(reservationResult)
-        setBookTitleById(new Map(books.map((b) => [b.id, b.title])))
+        setPage(reservationResult)
+        setBookTitleById(new Map(books.data.map((b) => [b.id, b.title])))
       })
       .catch((err) => setError(getErrorMessage(err, 'Unable to load your reservations.')))
       .finally(() => setIsLoading(false))
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageNumber])
 
   useEffect(() => {
     load()
@@ -144,7 +151,10 @@ export default function MyReservationsPage() {
           description="Reserve a book that's currently unavailable and it will show up here once it's your turn."
         />
       ) : (
-        <Table columns={columns} data={reservations} rowKey={(r) => r.id} />
+        <>
+          <Table columns={columns} data={reservations} rowKey={(r) => r.id} />
+          {page && <Pagination page={page} onPageChange={setPageNumber} isLoading={isLoading} />}
+        </>
       )}
 
       <ConfirmDialog

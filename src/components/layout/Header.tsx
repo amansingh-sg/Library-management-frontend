@@ -9,7 +9,6 @@ import { cn } from '@/utils/cn'
 const roleTone: Record<string, 'purple' | 'blue' | 'green' | 'slate'> = {
   SUPER_ADMIN: 'purple',
   LIBRARIAN: 'blue',
-  STAFF: 'green',
   MEMBER: 'slate',
 }
 

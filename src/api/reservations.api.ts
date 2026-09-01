@@ -1,5 +1,17 @@
 import { apiClient } from './client'
-import type { Reservation } from '@/types/models'
+import type { PageParams, PaginatedResponse, Reservation } from '@/types/models'
+
+// GET /reservations/?page=&per_page= — requires MANAGE_RESERVATIONS (every member's reservations)
+export async function getAllReservations({
+  page,
+  perPage,
+}: PageParams = {}): Promise<PaginatedResponse<Reservation>> {
+  const params: Record<string, number> = {}
+  if (page) params.page = page
+  if (perPage) params.per_page = perPage
+  const { data } = await apiClient.get<PaginatedResponse<Reservation>>('/reservations/', { params })
+  return data
+}
 
 // POST /reservations/ — requires CREATE_RESERVATION
 export async function createReservation(bookId: string): Promise<Reservation> {
@@ -7,9 +19,15 @@ export async function createReservation(bookId: string): Promise<Reservation> {
   return data
 }
 
-// GET /reservations/me — requires VIEW_OWN_RESERVATIONS
-export async function getMyReservations(): Promise<Reservation[]> {
-  const { data } = await apiClient.get<Reservation[]>('/reservations/me')
+// GET /reservations/me?page=&per_page= — requires VIEW_OWN_RESERVATIONS
+export async function getMyReservations({
+  page,
+  perPage,
+}: PageParams = {}): Promise<PaginatedResponse<Reservation>> {
+  const params: Record<string, number> = {}
+  if (page) params.page = page
+  if (perPage) params.per_page = perPage
+  const { data } = await apiClient.get<PaginatedResponse<Reservation>>('/reservations/me', { params })
   return data
 }
 

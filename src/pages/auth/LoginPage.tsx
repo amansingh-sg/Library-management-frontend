@@ -64,16 +64,24 @@ export default function LoginPage() {
           error={errors.email}
           onChange={(e) => setEmail(e.target.value)}
         />
-        <Input
-          label="Password"
-          type="password"
-          name="password"
-          autoComplete="current-password"
-          placeholder="••••••••"
-          value={password}
-          error={errors.password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div>
+          <Input
+            label="Password"
+            type="password"
+            name="password"
+            autoComplete="current-password"
+            placeholder="••••••••"
+            value={password}
+            error={errors.password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <Link
+            to="/forgot-password"
+            className="mt-1.5 inline-block text-xs font-medium text-brand-600 hover:text-brand-700"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <Button type="submit" isLoading={isLoading} className="mt-2 w-full">
           Sign in
         </Button>

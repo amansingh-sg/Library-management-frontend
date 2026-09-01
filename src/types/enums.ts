@@ -1,11 +1,25 @@
 // Mirrors src/database/model/role.enum.ts on the backend — verified against source.
+// STAFF was removed (migration RemoveStaffRole1787900000002): it granted no capability
+// beyond MEMBER in practice, since every "act on behalf of another member" action was
+// hardcoded self-service only elsewhere in the backend. Its meaningful grants were
+// folded into LIBRARIAN.
 export const Role = {
   MEMBER: 'MEMBER',
-  STAFF: 'STAFF',
   LIBRARIAN: 'LIBRARIAN',
   SUPER_ADMIN: 'SUPER_ADMIN',
 } as const
 export type Role = (typeof Role)[keyof typeof Role]
+
+// Mirrors ROLE_HIERARCHY in src/database/model/role.enum.ts — each role inherits every
+// permission of the role before it (MEMBER -> LIBRARIAN -> SUPER_ADMIN).
+export const ROLE_HIERARCHY: Role[] = [Role.MEMBER, Role.LIBRARIAN, Role.SUPER_ADMIN]
+
+// Every role from MEMBER up to and including `role`, ascending by privilege.
+export function getRoleChain(role: Role): Role[] {
+  const index = ROLE_HIERARCHY.indexOf(role)
+  if (index === -1) return [role]
+  return ROLE_HIERARCHY.slice(0, index + 1)
+}
 
 // Mirrors src/database/model/permission.enum.ts on the backend — verified against source.
 export const Permission = {
@@ -41,13 +55,18 @@ export type ReservationStatus = (typeof ReservationStatus)[keyof typeof Reservat
 // client-side-visible-only on list/get responses (see loans.service.ts:getLoanStatus).
 export type LoanStatus = 'ACTIVE' | 'RETURNED' | 'OVERDUE'
 
-// Default role -> permission seed from migration 1787240686929-CreateRolePermissions.ts.
+// Each role's OWN default permissions (not cumulative) — mirrors the base grants seeded
+// by migration 1787900000001-MakeRolePermissionsCumulative.ts. Roles are cumulative by
+// hierarchy (see ROLE_HIERARCHY above): a role also inherits every base permission of
+// every role before it in the chain — see DEFAULT_ROLE_PERMISSIONS below.
+//
 // This is ONLY a best-effort default for client-side nav filtering — the backend's
-// role_permissions table is the real source of truth and can be edited at runtime via
-// /admin/roles/:role/permissions. Every privileged action is still re-checked by the
-// backend (which returns 403 if the live grant differs), so a stale value here can
-// only ever hide/show a nav item incorrectly, never bypass real authorization.
-export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
+// role_permissions table (plus any per-user overrides) is the real source of truth and
+// can be edited at runtime via the admin permissions panel. Every privileged action is
+// still re-checked by the backend (which returns 403 if the live grant differs), so a
+// stale value here can only ever hide/show a nav item incorrectly, never bypass real
+// authorization.
+const BASE_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   [Role.MEMBER]: [
     Permission.VIEW_BOOKS,
     Permission.BORROW_BOOKS,
@@ -55,20 +74,23 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.CREATE_RESERVATION,
     Permission.VIEW_OWN_RESERVATIONS,
   ],
-  [Role.STAFF]: [
-    Permission.VIEW_BOOKS,
-    Permission.VIEW_OWN_LOANS,
+  [Role.LIBRARIAN]: [
     Permission.ISSUE_LOANS,
     Permission.RETURN_LOANS,
     Permission.RENEW_LOANS,
-  ],
-  [Role.LIBRARIAN]: [
-    Permission.VIEW_BOOKS,
+    Permission.MANAGE_RESERVATIONS,
     Permission.MANAGE_BOOKS,
-    Permission.ISSUE_LOANS,
     Permission.MANAGE_LOANS,
     Permission.MANAGE_MEMBERS,
-    Permission.MANAGE_RESERVATIONS,
   ],
-  [Role.SUPER_ADMIN]: Object.values(Permission),
+  [Role.SUPER_ADMIN]: [Permission.MANAGE_USERS, Permission.MANAGE_ROLE_PERMISSIONS, Permission.FULL_SYSTEM_ACCESS],
 }
+
+// A role's effective (cumulative) default permissions — its own base grants plus every
+// base grant of the roles below it in the hierarchy.
+export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = Object.fromEntries(
+  Object.values(Role).map((role) => [
+    role,
+    Array.from(new Set(getRoleChain(role).flatMap((chainRole) => BASE_ROLE_PERMISSIONS[chainRole]))),
+  ]),
+) as Record<Role, Permission[]>

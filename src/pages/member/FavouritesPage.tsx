@@ -12,31 +12,37 @@ import { Button } from '@/components/ui/Button'
 import { SkeletonCard } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
-import type { Author, Book, Favourite } from '@/types/models'
+import { Pagination } from '@/components/ui/Pagination'
+import type { Author, Book, Favourite, PaginatedResponse } from '@/types/models'
 
 export default function FavouritesPage() {
-  const [favourites, setFavourites] = useState<Favourite[]>([])
+  const [page, setPage] = useState<PaginatedResponse<Favourite> | null>(null)
+  const [pageNumber, setPageNumber] = useState(1)
   const [books, setBooks] = useState<Book[]>([])
   const [authors, setAuthors] = useState<Author[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyBookId, setBusyBookId] = useState<string | null>(null)
 
+  const favourites = page?.data ?? []
   const bookById = useMemo(() => new Map(books.map((b) => [b.id, b])), [books])
   const authorNameById = useMemo(() => new Map(authors.map((a) => [a.id, a.name])), [authors])
 
   const load = useCallback(() => {
     setIsLoading(true)
     setError(null)
-    Promise.all([getMyFavourites(), getBooks(), getAuthors()])
+    // Books are fetched in full here (not paginated) — it's a lookup map to join
+    // favourites onto, not the list this page paginates.
+    Promise.all([getMyFavourites({ page: pageNumber }), getBooks({}, { perPage: 500 }), getAuthors()])
       .then(([favouriteResult, bookResult, authorResult]) => {
-        setFavourites(favouriteResult)
-        setBooks(bookResult)
+        setPage(favouriteResult)
+        setBooks(bookResult.data)
         setAuthors(authorResult)
       })
       .catch((err) => setError(getErrorMessage(err, 'Unable to load your favourites.')))
       .finally(() => setIsLoading(false))
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageNumber])
 
   useEffect(() => {
     load()
@@ -46,7 +52,7 @@ export default function FavouritesPage() {
     setBusyBookId(book.id)
     try {
       await removeFavourite(book.id)
-      setFavourites((prev) => prev.filter((f) => f.bookId !== book.id))
+      setPage((prev) => prev && { ...prev, data: prev.data.filter((f) => f.bookId !== book.id) })
       toast.success('Removed from favourites')
     } catch (err) {
       toast.error(getErrorMessage(err, 'Unable to remove favourite.'))
@@ -85,18 +91,21 @@ export default function FavouritesPage() {
       )}
 
       {!isLoading && !error && favouriteBooks.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {favouriteBooks.map((book) => (
-            <BookCard
-              key={book.id}
-              book={book}
-              authorName={authorNameById.get(book.authorId) ?? 'Unknown author'}
-              isFavourite
-              favouriteBusy={busyBookId === book.id}
-              onToggleFavourite={handleRemove}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {favouriteBooks.map((book) => (
+              <BookCard
+                key={book.id}
+                book={book}
+                authorName={authorNameById.get(book.authorId) ?? 'Unknown author'}
+                isFavourite
+                favouriteBusy={busyBookId === book.id}
+                onToggleFavourite={handleRemove}
+              />
+            ))}
+          </div>
+          {page && <Pagination page={page} onPageChange={setPageNumber} isLoading={isLoading} />}
+        </>
       )}
     </div>
   )

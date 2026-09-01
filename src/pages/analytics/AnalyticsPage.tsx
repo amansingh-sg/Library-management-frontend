@@ -18,7 +18,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { useAuth } from '@/hooks/useAuth'
 import { Permission } from '@/types/enums'
-import { formatDate, formatDateTime, toNumber } from '@/utils/format'
+import { formatDate, formatDateTime, formatFine, toNumber } from '@/utils/format'
 import {
   getBookAnalytics,
   getBorrowingTrends,
@@ -124,6 +124,7 @@ export default function AnalyticsPage() {
         return <Badge tone="red">{days} day{days === 1 ? '' : 's'}</Badge>
       },
     },
+    { header: 'Fine', accessor: (r) => <span className="font-medium text-red-600">{formatFine(r.fineAmount)}</span> },
   ]
 
   return (
@@ -135,19 +136,26 @@ export default function AnalyticsPage() {
 
       {/* KPI row */}
       {summary.isLoading ? (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
       ) : summary.error ? (
         <ErrorState message={summary.error} onRetry={summary.reload} />
       ) : summary.data ? (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
           <KpiCard label="Total books" value={summary.data.totalBooks} icon={BookOpen} tone="brand" />
           <KpiCard label="Total members" value={summary.data.totalMembers} icon={Users} tone="purple" />
           <KpiCard label="Active loans" value={summary.data.activeLoans} icon={Library} tone="green" />
           <KpiCard label="Overdue loans" value={summary.data.overdueLoans} icon={AlertTriangle} tone="red" />
+          <KpiCard
+            label="Outstanding fines"
+            value={formatFine(summary.data.totalOutstandingFines)}
+            icon={AlertTriangle}
+            tone="red"
+            hint="Sum of every overdue loan's fine"
+          />
           <KpiCard
             label="Pending reservations"
             value={summary.data.pendingReservations.length}

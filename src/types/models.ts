@@ -1,5 +1,25 @@
 import type { LoanStatus, Permission, ReservationStatus, Role } from './enums'
 
+// Matches typeorm-pagination's PaginationAwareObject (backend) — every list endpoint
+// (books, loans, reservations, admin users, favourites) returns this shape. Request a
+// page with `?page=&per_page=` (both optional, default page=1 per_page=15).
+export interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  per_page: number
+  current_page: number
+  last_page: number
+  from: number | null
+  to: number | null
+  prev_page: number | null
+  next_page: number | null
+}
+
+export interface PageParams {
+  page?: number
+  perPage?: number
+}
+
 // GET /books, GET /books/:id — flat entity, no nested author/category (verified: books
 // controller/repository never eager-loads or selects the joined relations).
 export interface Book {
@@ -94,6 +114,9 @@ export interface Loan {
   status: LoanStatus
   createdAt: string
   updatedAt: string
+  // Accrues while overdue and unreturned; frozen at whatever it was on the day it was
+  // returned. 0 if never overdue. See fine-calculator.ts on the backend.
+  fineAmount: number
 }
 
 export interface Reservation {
@@ -120,6 +143,24 @@ export interface RolePermissionGrant {
   role: Role
   permission: Permission
   createdAt: string
+}
+
+export type PermissionOverrideType = 'GRANT' | 'REVOKE'
+
+export interface UserPermissionOverride {
+  id: string
+  userId: string
+  permission: Permission
+  type: PermissionOverrideType
+  createdAt: string
+}
+
+// A single permission's effective state for one user: whether it is granted, and
+// whether that comes from their role's cumulative default or an individual override.
+export interface EffectivePermission {
+  permission: Permission
+  granted: boolean
+  source: 'role' | 'grant' | 'revoke'
 }
 
 // ---- Analytics (all raw JSON, no envelope) ----
@@ -168,6 +209,7 @@ export interface OverdueLoanRow {
   borrowed_at: string
   due_at: string
   email: string
+  fineAmount: number
 }
 
 // GET /analytics/dashboard — note: due to a backend key-collision bug, the
@@ -179,6 +221,7 @@ export interface DashboardSummary {
   totalMembers: number
   activeLoans: number
   overdueLoans: number
+  totalOutstandingFines: number
   mostBorrowed: BookAnalyticsRow[]
   mostFavourited: BookAnalyticsRow[]
   pendingReservations: BookAnalyticsRow[]

@@ -10,12 +10,16 @@ import { Permission } from '@/types/enums'
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import VerifyEmailPage from '@/pages/auth/VerifyEmailPage'
+import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
+import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
 import DashboardPage from '@/pages/member/DashboardPage'
 import BooksPage from '@/pages/member/BooksPage'
 import BookDetailsPage from '@/pages/member/BookDetailsPage'
 import MyLoansPage from '@/pages/member/MyLoansPage'
 import MyReservationsPage from '@/pages/member/MyReservationsPage'
 import FavouritesPage from '@/pages/member/FavouritesPage'
+import LoansManagementPage from '@/pages/library/LoansManagementPage'
+import ReservationsManagementPage from '@/pages/library/ReservationsManagementPage'
 import UsersPage from '@/pages/admin/UsersPage'
 import RolePermissionsPage from '@/pages/admin/RolePermissionsPage'
 import AnalyticsPage from '@/pages/analytics/AnalyticsPage'
@@ -32,6 +36,8 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/user-email-verification/:uniqueKey" element={<VerifyEmailPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
           </Route>
 
           <Route element={<ProtectedRoute />}>
@@ -42,6 +48,23 @@ export default function App() {
               <Route path="/my-loans" element={<MyLoansPage />} />
               <Route path="/my-reservations" element={<MyReservationsPage />} />
               <Route path="/favourites" element={<FavouritesPage />} />
+
+              <Route
+                path="/loans"
+                element={
+                  <RequirePermission anyOf={[Permission.MANAGE_LOANS]}>
+                    <LoansManagementPage />
+                  </RequirePermission>
+                }
+              />
+              <Route
+                path="/reservations"
+                element={
+                  <RequirePermission anyOf={[Permission.MANAGE_RESERVATIONS]}>
+                    <ReservationsManagementPage />
+                  </RequirePermission>
+                }
+              />
 
               <Route
                 path="/admin/users"

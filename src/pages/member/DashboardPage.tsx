@@ -24,9 +24,10 @@ import { LoanStatusBadge } from '@/components/common/StatusBadge'
 import { Badge } from '@/components/ui/Badge'
 import { useAuth } from '@/hooks/useAuth'
 import { formatDate } from '@/utils/format'
-import { Permission, ReservationStatus } from '@/types/enums'
+import { Permission, ReservationStatus, Role } from '@/types/enums'
 import { cn } from '@/utils/cn'
 import type { Book, Loan, Reservation } from '@/types/models'
+import LibraryDashboard from '@/pages/library/LibraryDashboard'
 
 function greetingForHour(hour: number): string {
   if (hour < 5) return 'Good night'
@@ -56,6 +57,21 @@ interface QuickLink {
 
 export default function DashboardPage() {
   const { user, hasPermission } = useAuth()
+
+  // LIBRARIAN/SUPER_ADMIN land on library-wide KPIs instead of the personal
+  // loans/reservations widgets below - same reasoning as hiding My Loans/My
+  // Reservations from their nav (see nav-config.ts's hiddenForRoles).
+  if (user && (user.role === Role.LIBRARIAN || user.role === Role.SUPER_ADMIN)) {
+    return <LibraryDashboard />
+  }
+
+  return <MemberDashboard hasPermission={hasPermission} user={user} />
+}
+
+function MemberDashboard({
+  hasPermission,
+  user,
+}: Pick<ReturnType<typeof useAuth>, 'hasPermission' | 'user'>) {
   const [loans, setLoans] = useState<Loan[]>([])
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [favouritesCount, setFavouritesCount] = useState(0)
@@ -69,20 +85,25 @@ export default function DashboardPage() {
   const loadDashboard = () => {
     setIsLoading(true)
     setError(null)
-    // Not every role that lands on "/" holds the member-self-service permissions
-    // (e.g. LIBRARIAN/STAFF don't have VIEW_OWN_LOANS by default) — only call each
-    // endpoint when permitted, and never surface a permission gap as a page error.
+    // Every role inherits MEMBER's self-service permissions in the current cumulative
+    // hierarchy, but this still guards against a per-user override revoking one of
+    // them — only call each endpoint when permitted, and never surface a permission
+    // gap as a page error.
+    //
+    // These are dashboard previews, not the paginated list views (My Loans/My
+    // Reservations/Favourites) — a generous per_page keeps the KPI counts and "recent"
+    // list accurate for virtually every member without needing pager UI here.
     Promise.all([
-      canViewOwnLoans ? getMyLoans() : Promise.resolve<Loan[]>([]),
-      canViewOwnReservations ? getMyReservations() : Promise.resolve<Reservation[]>([]),
-      getMyFavourites().catch(() => []),
-      getBooks().catch(() => []),
+      canViewOwnLoans ? getMyLoans({ perPage: 100 }) : Promise.resolve(null),
+      canViewOwnReservations ? getMyReservations({ perPage: 100 }) : Promise.resolve(null),
+      getMyFavourites().catch(() => null),
+      getBooks().catch(() => null),
     ])
       .then(([loanResult, reservationResult, favouriteResult, books]) => {
-        setLoans(loanResult)
-        setReservations(reservationResult)
-        setFavouritesCount(favouriteResult.length)
-        setAvailableBooks(books.filter((b) => b.availableCopies > 0).slice(0, 5))
+        setLoans(loanResult?.data ?? [])
+        setReservations(reservationResult?.data ?? [])
+        setFavouritesCount(favouriteResult?.total ?? 0)
+        setAvailableBooks((books?.data ?? []).filter((b) => b.availableCopies > 0).slice(0, 5))
       })
       .catch((err) => setError(getErrorMessage(err, 'Unable to load your dashboard.')))
       .finally(() => setIsLoading(false))

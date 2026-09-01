@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { BookMarked, X } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { adminNav, analyticsNav, memberNav, type NavItem } from './nav-config'
+import { adminNav, analyticsNav, libraryNav, memberNav, type NavItem } from './nav-config'
 import { cn } from '@/utils/cn'
 
 interface SidebarProps {
@@ -10,8 +10,11 @@ interface SidebarProps {
 }
 
 function NavSection({ title, items }: { title?: string; items: NavItem[] }) {
-  const { hasPermission } = useAuth()
-  const visible = items.filter((item) => !item.anyOf || hasPermission(...item.anyOf))
+  const { hasPermission, user } = useAuth()
+  const visible = items.filter((item) => {
+    if (item.hiddenForRoles && user && item.hiddenForRoles.includes(user.role)) return false
+    return !item.anyOf || hasPermission(...item.anyOf)
+  })
   if (visible.length === 0) return null
 
   return (
@@ -60,6 +63,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </div>
         <nav className="flex-1 overflow-y-auto">
           <NavSection items={memberNav} />
+          <NavSection title="Library" items={libraryNav} />
           <NavSection title="Analytics" items={analyticsNav} />
           <NavSection title="Administration" items={adminNav} />
         </nav>

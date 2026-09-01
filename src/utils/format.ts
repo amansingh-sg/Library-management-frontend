@@ -28,3 +28,9 @@ export function daysUntil(value: string): number {
   const diffMs = new Date(value).getTime() - Date.now()
   return Math.ceil(diffMs / (1000 * 60 * 60 * 24))
 }
+
+// The backend fine rate has no currency attached (see fine-calculator.ts) — format as a
+// plain amount rather than implying a specific currency.
+export function formatFine(amount: number): string {
+  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}

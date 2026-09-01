@@ -15,11 +15,12 @@ import { Modal } from '@/components/ui/Modal'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
+import { Pagination } from '@/components/ui/Pagination'
+import type { PaginatedResponse } from '@/types/models'
 
-const roleTone: Record<Role, 'purple' | 'blue' | 'green' | 'slate'> = {
+const roleTone: Record<Role, 'purple' | 'blue' | 'slate'> = {
   [Role.SUPER_ADMIN]: 'purple',
   [Role.LIBRARIAN]: 'blue',
-  [Role.STAFF]: 'green',
   [Role.MEMBER]: 'slate',
 }
 
@@ -27,7 +28,8 @@ export default function UsersPage() {
   const { hasPermission } = useAuth()
   const canManageRoles = hasPermission(Permission.MANAGE_USERS)
 
-  const [users, setUsers] = useState<AdminUser[]>([])
+  const [page, setPage] = useState<PaginatedResponse<AdminUser> | null>(null)
+  const [pageNumber, setPageNumber] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -36,12 +38,14 @@ export default function UsersPage() {
   const [selectedRole, setSelectedRole] = useState<Role>(Role.MEMBER)
   const [isSaving, setIsSaving] = useState(false)
 
+  const users = page?.data ?? []
+
   async function loadUsers() {
     setIsLoading(true)
     setError(null)
     try {
-      const data = await adminApi.getUsers()
-      setUsers(data)
+      const result = await adminApi.getUsers({ page: pageNumber })
+      setPage(result)
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load users.'))
     } finally {
@@ -51,7 +55,8 @@ export default function UsersPage() {
 
   useEffect(() => {
     loadUsers()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageNumber])
 
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -77,7 +82,7 @@ export default function UsersPage() {
     setIsSaving(true)
     try {
       const updated = await adminApi.updateUserRole(editingUser.id, selectedRole)
-      setUsers((prev) => prev.map((user) => (user.id === updated.id ? updated : user)))
+      setPage((prev) => prev && { ...prev, data: prev.data.map((user) => (user.id === updated.id ? updated : user)) })
       toast.success(`Updated ${updated.email}'s role to ${updated.role}.`)
       setEditingUser(null)
     } catch (err) {
@@ -151,7 +156,10 @@ export default function UsersPage() {
       )}
 
       {!isLoading && !error && filteredUsers.length > 0 && (
-        <Table columns={columns} data={filteredUsers} rowKey={(user) => user.id} />
+        <>
+          <Table columns={columns} data={filteredUsers} rowKey={(user) => user.id} />
+          {page && <Pagination page={page} onPageChange={setPageNumber} isLoading={isLoading} />}
+        </>
       )}
 
       <Modal

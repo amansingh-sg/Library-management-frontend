@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { Book, CreateBookPayload } from '@/types/models'
+import type { Book, CreateBookPayload, PageParams, PaginatedResponse } from '@/types/models'
 
 export interface BookFilters {
   search?: string
@@ -8,10 +8,17 @@ export interface BookFilters {
   category?: string
 }
 
-// GET /books?search=&title=&author=&category= — flat array, no pagination (verified).
-export async function getBooks(filters: BookFilters = {}): Promise<Book[]> {
-  const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v))
-  const { data } = await apiClient.get<Book[]>('/books', { params })
+// GET /books?search=&title=&author=&category=&page=&per_page=
+export async function getBooks(
+  filters: BookFilters = {},
+  { page, perPage }: PageParams = {},
+): Promise<PaginatedResponse<Book>> {
+  const params: Record<string, string | number> = Object.fromEntries(
+    Object.entries(filters).filter(([, v]) => v),
+  )
+  if (page) params.page = page
+  if (perPage) params.per_page = perPage
+  const { data } = await apiClient.get<PaginatedResponse<Book>>('/books', { params })
   return data
 }
 

@@ -13,12 +13,14 @@ import { Button } from '@/components/ui/Button'
 import { SkeletonCard } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
+import { Pagination } from '@/components/ui/Pagination'
 import { useDebounce } from '@/hooks/useDebounce'
 import { SEED_CATEGORIES } from '@/types/seed-categories'
-import type { Author, Book } from '@/types/models'
+import type { Author, Book, PaginatedResponse } from '@/types/models'
 
 export default function BooksPage() {
-  const [books, setBooks] = useState<Book[]>([])
+  const [page, setPage] = useState<PaginatedResponse<Book> | null>(null)
+  const [pageNumber, setPageNumber] = useState(1)
   const [authors, setAuthors] = useState<Author[]>([])
   const [favouriteBookIds, setFavouriteBookIds] = useState<Set<string>>(new Set())
   const [busyFavouriteId, setBusyFavouriteId] = useState<string | null>(null)
@@ -31,6 +33,8 @@ export default function BooksPage() {
   const [error, setError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
 
+  const books = page?.data ?? []
+
   const debouncedSearch = useDebounce(search, 350)
   const debouncedAuthor = useDebounce(authorFilter, 350)
 
@@ -40,23 +44,33 @@ export default function BooksPage() {
     getAuthors()
       .then(setAuthors)
       .catch(() => setAuthors([]))
-    getMyFavourites()
-      .then((favs) => setFavouriteBookIds(new Set(favs.map((f) => f.bookId))))
+    // This is a lookup set (which books am I favouriting), not a paged list.
+    getMyFavourites({ perPage: 500 })
+      .then(({ data }) => setFavouriteBookIds(new Set(data.map((f) => f.bookId))))
       .catch(() => setFavouriteBookIds(new Set()))
   }, [])
+
+  // A filter change should always land back on page 1 - staying on e.g. page 3 of a
+  // now much-smaller result set would just show an empty page.
+  useEffect(() => {
+    setPageNumber(1)
+  }, [debouncedSearch, debouncedAuthor, categoryFilter])
 
   useEffect(() => {
     let cancelled = false
     setIsLoading(true)
     setError(null)
 
-    getBooks({
-      search: debouncedSearch || undefined,
-      author: debouncedAuthor || undefined,
-      category: categoryFilter || undefined,
-    })
+    getBooks(
+      {
+        search: debouncedSearch || undefined,
+        author: debouncedAuthor || undefined,
+        category: categoryFilter || undefined,
+      },
+      { page: pageNumber },
+    )
       .then((result) => {
-        if (!cancelled) setBooks(result)
+        if (!cancelled) setPage(result)
       })
       .catch((err) => {
         if (!cancelled) setError(getErrorMessage(err, 'Unable to load books.'))
@@ -68,7 +82,7 @@ export default function BooksPage() {
     return () => {
       cancelled = true
     }
-  }, [debouncedSearch, debouncedAuthor, categoryFilter, reloadToken])
+  }, [debouncedSearch, debouncedAuthor, categoryFilter, pageNumber, reloadToken])
 
   async function handleToggleFavourite(book: Book) {
     const isFav = favouriteBookIds.has(book.id)
@@ -166,18 +180,21 @@ export default function BooksPage() {
       )}
 
       {!isLoading && !error && books.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {books.map((book) => (
-            <BookCard
-              key={book.id}
-              book={book}
-              authorName={authorNameById.get(book.authorId) ?? 'Unknown author'}
-              isFavourite={favouriteBookIds.has(book.id)}
-              favouriteBusy={busyFavouriteId === book.id}
-              onToggleFavourite={handleToggleFavourite}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {books.map((book) => (
+              <BookCard
+                key={book.id}
+                book={book}
+                authorName={authorNameById.get(book.authorId) ?? 'Unknown author'}
+                isFavourite={favouriteBookIds.has(book.id)}
+                favouriteBusy={busyFavouriteId === book.id}
+                onToggleFavourite={handleToggleFavourite}
+              />
+            ))}
+          </div>
+          {page && <Pagination page={page} onPageChange={setPageNumber} isLoading={isLoading} />}
+        </>
       )}
     </div>
   )
