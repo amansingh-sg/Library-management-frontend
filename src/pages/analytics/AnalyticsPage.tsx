@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   BookOpen,
@@ -13,6 +13,8 @@ import { KpiCard } from '@/components/ui/KpiCard'
 import { Select } from '@/components/ui/Select'
 import { Table, type Column } from '@/components/ui/Table'
 import { Badge } from '@/components/ui/Badge'
+import { StatusPills } from '@/components/ui/StatusPills'
+import { Pagination } from '@/components/ui/Pagination'
 import { SkeletonCard, SkeletonTable } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -39,6 +41,65 @@ const categoryTone: Record<MemberAnalyticsRow['category'], 'green' | 'blue' | 'a
   Inactive: 'slate',
 }
 
+const MEMBER_PAGE_SIZE = 10
+
+interface MemberSortOption {
+  value: string
+  label: string
+  compare: (a: MemberAnalyticsRow, b: MemberAnalyticsRow) => number
+}
+
+// getMemberAnalytics/getOverdueLoans return the full, unpaginated dataset (see
+// analytics.api.ts) with no server-side sort param, so both are sorted client-side
+// against whatever's already been fetched.
+//
+// No separate "sort by rank" option: the Rank column is RANK() OVER (ORDER BY
+// engagement_score DESC) (see analytics.repository.ts's getMemberActivity), so
+// sorting by rank ascending/descending is the exact same ordering as engagement
+// score descending/ascending - offering both as separate, differently-worded menu
+// entries just meant two options did the same thing under unclear names ("best"/
+// "worst" rank, without saying rank of what). Engagement score alone says what's
+// actually being compared.
+const MEMBER_SORT_OPTIONS: MemberSortOption[] = [
+  { value: 'engagement-desc', label: 'Engagement score (highest first)', compare: (a, b) => b.engagementScore - a.engagementScore },
+  { value: 'engagement-asc', label: 'Engagement score (lowest first)', compare: (a, b) => a.engagementScore - b.engagementScore },
+  { value: 'loans-desc', label: 'Most loans first', compare: (a, b) => b.totalLoans - a.totalLoans },
+  { value: 'reservations-desc', label: 'Most reservations first', compare: (a, b) => b.totalReservations - a.totalReservations },
+  { value: 'favourites-desc', label: 'Most favourites first', compare: (a, b) => b.totalFavourites - a.totalFavourites },
+  {
+    value: 'lastActivity-desc',
+    label: 'Most recent activity first',
+    compare: (a, b) => new Date(b.lastActivity ?? 0).getTime() - new Date(a.lastActivity ?? 0).getTime(),
+  },
+  { value: 'email-asc', label: 'Email (A–Z)', compare: (a, b) => a.email.localeCompare(b.email) },
+]
+
+interface OverdueSortOption {
+  value: string
+  label: string
+  compare: (a: OverdueLoanRow, b: OverdueLoanRow) => number
+}
+
+// No separate "sort by fine" option: the fine is a flat rate per day overdue (see
+// calculateFine in fine-calculator.ts - every loan accrues at the same RATE_PER_DAY),
+// so it's always exactly proportional to days overdue. Sorting by fine amount would
+// always produce the identical order to sorting by days overdue - keeping only the
+// latter avoids offering two menu entries that do the same thing.
+const OVERDUE_SORT_OPTIONS: OverdueSortOption[] = [
+  {
+    value: 'dueAt-asc',
+    label: 'Most overdue first',
+    compare: (a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime(),
+  },
+  {
+    value: 'dueAt-desc',
+    label: 'Least overdue first',
+    compare: (a, b) => new Date(b.due_at).getTime() - new Date(a.due_at).getTime(),
+  },
+  { value: 'book-asc', label: 'Book title (A–Z)', compare: (a, b) => a.title.localeCompare(b.title) },
+  { value: 'member-asc', label: 'Member (A–Z)', compare: (a, b) => a.email.localeCompare(b.email) },
+]
+
 function toRows(rows: BookAnalyticsRow[], countKey: keyof BookAnalyticsRow): TopBooksChartRow[] {
   return rows.map((row) => ({ id: row.id, title: row.title, count: toNumber(row[countKey] as number | string | undefined) }))
 }
@@ -60,6 +121,10 @@ export default function AnalyticsPage() {
   const canViewOverdue = hasPermission(Permission.MANAGE_LOANS)
 
   const [period, setPeriod] = useState<TrendPeriod>('month')
+  const [categoryFilter, setCategoryFilter] = useState<MemberAnalyticsRow['category'] | ''>('')
+  const [memberPage, setMemberPage] = useState(1)
+  const [memberSortValue, setMemberSortValue] = useState(MEMBER_SORT_OPTIONS[0].value)
+  const [overdueSortValue, setOverdueSortValue] = useState(OVERDUE_SORT_OPTIONS[0].value)
 
   const summary = useSectionData(getDashboardSummary, [])
   const bookAnalytics = useSectionData(() => getBookAnalytics(10), [])
@@ -101,13 +166,61 @@ export default function AnalyticsPage() {
     return counts
   }, [memberAnalytics.data])
 
+  const memberSort = MEMBER_SORT_OPTIONS.find((o) => o.value === memberSortValue) ?? MEMBER_SORT_OPTIONS[0]
+
+  const sortedMembers = useMemo(
+    () => [...(memberAnalytics.data ?? [])].sort(memberSort.compare),
+    [memberAnalytics.data, memberSort],
+  )
+
+  const filteredMembers = useMemo(
+    () => (categoryFilter ? sortedMembers.filter((r) => r.category === categoryFilter) : sortedMembers),
+    [sortedMembers, categoryFilter],
+  )
+
+  // Resets to page 1 whenever the category filter or sort changes, so switching
+  // either never leaves the view stranded on a page past the end of the new
+  // result set/order.
+  useEffect(() => {
+    setMemberPage(1)
+  }, [categoryFilter, memberSortValue])
+
+  const overdueSort = OVERDUE_SORT_OPTIONS.find((o) => o.value === overdueSortValue) ?? OVERDUE_SORT_OPTIONS[0]
+
+  const sortedOverdueLoans = useMemo(
+    () => [...(overdueLoans.data ?? [])].sort(overdueSort.compare),
+    [overdueLoans.data, overdueSort],
+  )
+
+  // getMemberAnalytics returns the full, unpaginated member list (see analytics.api.ts)
+  // - paginate the filtered rows client-side in the same PaginatedResponse shape the
+  // shared <Pagination> component expects.
+  const memberTotal = filteredMembers.length
+  const memberLastPage = Math.max(1, Math.ceil(memberTotal / MEMBER_PAGE_SIZE))
+  const memberCurrentPage = Math.min(memberPage, memberLastPage)
+  const pagedMembers = filteredMembers.slice(
+    (memberCurrentPage - 1) * MEMBER_PAGE_SIZE,
+    memberCurrentPage * MEMBER_PAGE_SIZE,
+  )
+  const memberPaginationInfo = {
+    data: pagedMembers,
+    total: memberTotal,
+    per_page: MEMBER_PAGE_SIZE,
+    current_page: memberCurrentPage,
+    last_page: memberLastPage,
+    from: memberTotal === 0 ? null : (memberCurrentPage - 1) * MEMBER_PAGE_SIZE + 1,
+    to: memberTotal === 0 ? null : Math.min(memberCurrentPage * MEMBER_PAGE_SIZE, memberTotal),
+    prev_page: memberCurrentPage > 1 ? memberCurrentPage - 1 : null,
+    next_page: memberCurrentPage < memberLastPage ? memberCurrentPage + 1 : null,
+  }
+
   const memberColumns: Column<MemberAnalyticsRow>[] = [
-    { header: 'Rank', accessor: (r) => `#${r.rank}` },
+    { header: 'Rank (by engagement)', accessor: (r) => `#${r.rank}` },
     { header: 'Email', accessor: (r) => r.email },
     { header: 'Loans', accessor: (r) => r.totalLoans },
     { header: 'Reservations', accessor: (r) => r.totalReservations },
     { header: 'Favourites', accessor: (r) => r.totalFavourites },
-    { header: 'Engagement', accessor: (r) => r.engagementScore },
+    { header: 'Engagement score', accessor: (r) => r.engagementScore },
     { header: 'Category', accessor: (r) => <Badge tone={categoryTone[r.category]}>{r.category}</Badge> },
     { header: 'Last activity', accessor: (r) => formatDateTime(r.lastActivity) },
   ]
@@ -124,7 +237,18 @@ export default function AnalyticsPage() {
         return <Badge tone="red">{days} day{days === 1 ? '' : 's'}</Badge>
       },
     },
-    { header: 'Fine', accessor: (r) => <span className="font-medium text-red-600">{formatFine(r.fineAmount)}</span> },
+    {
+      header: 'Fine',
+      // Every row here is still ACTIVE and past due (see getOverdueLoans), so a
+      // fineAmount of 0 can only mean it's already been paid off - never "no fine
+      // ever accrued" - see LoansManagementPage's identical "Fine paid" treatment.
+      accessor: (r) =>
+        r.fineAmount > 0 ? (
+          <span className="font-medium text-red-600">{formatFine(r.fineAmount)}</span>
+        ) : Number(r.fine_paid_amount) > 0 ? (
+          <Badge tone="green">Fine paid</Badge>
+        ) : null,
+    },
   ]
 
   return (
@@ -266,18 +390,40 @@ export default function AnalyticsPage() {
             <ErrorState message={memberAnalytics.error} onRetry={memberAnalytics.reload} />
           ) : memberAnalytics.data && memberAnalytics.data.length > 0 ? (
             <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap gap-2">
-                {(Object.keys(memberCategoryCounts) as MemberAnalyticsRow['category'][]).map((cat) => (
-                  <Badge key={cat} tone={categoryTone[cat]}>
-                    {memberCategoryCounts[cat]} {cat}
-                  </Badge>
-                ))}
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <StatusPills
+                  options={[
+                    { value: '', label: `All (${memberAnalytics.data.length})` },
+                    ...(Object.keys(memberCategoryCounts) as MemberAnalyticsRow['category'][]).map((cat) => ({
+                      value: cat,
+                      label: `${cat} (${memberCategoryCounts[cat]})`,
+                    })),
+                  ]}
+                  value={categoryFilter}
+                  onChange={setCategoryFilter}
+                />
+                <div className="w-64">
+                  <Select label="Sort by" value={memberSortValue} onChange={(e) => setMemberSortValue(e.target.value)}>
+                    {MEMBER_SORT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
               </div>
-              <Table
-                columns={memberColumns}
-                data={[...memberAnalytics.data].sort((a, b) => a.rank - b.rank)}
-                rowKey={(r) => r.userId}
-              />
+              {filteredMembers.length === 0 ? (
+                <EmptyState
+                  icon={Users}
+                  title="No members in this category"
+                  description="Try a different filter."
+                />
+              ) : (
+                <>
+                  <Table columns={memberColumns} data={pagedMembers} rowKey={(r) => r.userId} />
+                  <Pagination page={memberPaginationInfo} onPageChange={setMemberPage} isLoading={memberAnalytics.isLoading} />
+                </>
+              )}
             </div>
           ) : (
             <EmptyState icon={Users} title="No member activity yet" description="Engagement scores will appear once members start borrowing, reserving, or favouriting books." />
@@ -293,7 +439,20 @@ export default function AnalyticsPage() {
           ) : overdueLoans.error ? (
             <ErrorState message={overdueLoans.error} onRetry={overdueLoans.reload} />
           ) : overdueLoans.data && overdueLoans.data.length > 0 ? (
-            <Table columns={overdueColumns} data={overdueLoans.data} rowKey={(r) => r.id} />
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-end">
+                <div className="w-56">
+                  <Select label="Sort by" value={overdueSortValue} onChange={(e) => setOverdueSortValue(e.target.value)}>
+                    {OVERDUE_SORT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+              <Table columns={overdueColumns} data={sortedOverdueLoans} rowKey={(r) => r.id} />
+            </div>
           ) : (
             <EmptyState icon={CheckCircle2} title="No overdue loans — nice!" description="Every active loan is within its due date." />
           )}

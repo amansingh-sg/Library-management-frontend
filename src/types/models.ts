@@ -76,6 +76,14 @@ export interface AuthSession {
   refreshToken?: string
 }
 
+// POST /register no longer returns a token - the account isn't verified yet, so it
+// wouldn't work against login-gated routes anyway. The user must click the
+// verification link (which does log them in, via AuthSession from /user-email-verification).
+export interface RegisteredAccount {
+  id: string
+  email: string
+}
+
 export interface RegisterPayload {
   email: string
   password: string
@@ -101,6 +109,7 @@ export interface AdminUser {
   lastName: string
   dob: string
   isVerified: boolean
+  isActive: boolean
   role: Role
 }
 
@@ -114,9 +123,17 @@ export interface Loan {
   status: LoanStatus
   createdAt: string
   updatedAt: string
-  // Accrues while overdue and unreturned; frozen at whatever it was on the day it was
-  // returned. 0 if never overdue. See fine-calculator.ts on the backend.
+  // What's still OUTSTANDING - accrues while overdue and unreturned, frozen at
+  // whatever it was on the day it was returned, minus anything already recorded as
+  // paid (finePaidAmount). 0 if never overdue or fully paid. See
+  // fine-calculator.ts on the backend.
   fineAmount: number
+  // Cumulative amount recorded as paid via the librarian/admin "mark as paid"
+  // action (see LoansService.payFine) - not itself the outstanding balance, see
+  // fineAmount above for that.
+  finePaidAmount: number
+  finePaidAt: string | null
+  finePaidBy: string | null
 }
 
 export interface Reservation {
@@ -209,7 +226,12 @@ export interface OverdueLoanRow {
   borrowed_at: string
   due_at: string
   email: string
+  // Outstanding amount - already net of anything paid (see backend's outstandingFine).
   fineAmount: number
+  // Raw lifetime-paid total (string - comes straight off a numeric Postgres column).
+  // Lets the UI tell "never had a fine" apart from "had one, already settled" even
+  // though fineAmount is 0 in both cases - see LoansManagementPage's "Fine paid" badge.
+  fine_paid_amount: string
 }
 
 // GET /analytics/dashboard — note: due to a backend key-collision bug, the

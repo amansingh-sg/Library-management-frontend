@@ -10,14 +10,29 @@ import type {
 } from '@/types/models'
 import type { Permission, Role } from '@/types/enums'
 
-// GET /admin/users?page=&per_page= — requires MANAGE_USERS | MANAGE_MEMBERS.
+export type UserSortBy = 'firstName' | 'email' | 'role' | 'isActive' | 'createdAt'
+export type SortOrder = 'ASC' | 'DESC'
+
+interface UserSortParams {
+  sortBy?: UserSortBy
+  sortOrder?: SortOrder
+}
+
+// GET /admin/users?page=&per_page=&sortBy=&sortOrder= — requires MANAGE_USERS | MANAGE_MEMBERS.
 // NOTE: the backend response also includes `password` (bcrypt hash) and
 // `userUniqueKey` for every row (unfiltered entity serialization — a real security
 // gap). We deliberately type the result without those fields and never read them.
-export async function getUsers({ page, perPage }: PageParams = {}): Promise<PaginatedResponse<AdminUser>> {
-  const params: Record<string, number> = {}
+export async function getUsers({
+  page,
+  perPage,
+  sortBy,
+  sortOrder,
+}: PageParams & UserSortParams = {}): Promise<PaginatedResponse<AdminUser>> {
+  const params: Record<string, string | number> = {}
   if (page) params.page = page
   if (perPage) params.per_page = perPage
+  if (sortBy) params.sortBy = sortBy
+  if (sortOrder) params.sortOrder = sortOrder
   const { data } = await apiClient.get<PaginatedResponse<AdminUser>>('/admin/users', { params })
   return data
 }
@@ -25,6 +40,31 @@ export async function getUsers({ page, perPage }: PageParams = {}): Promise<Pagi
 // PATCH /admin/users/:id/role — requires MANAGE_USERS
 export async function updateUserRole(id: string, role: Role): Promise<AdminUser> {
   const { data } = await apiClient.patch<AdminUser>(`/admin/users/${id}/role`, { role })
+  return data
+}
+
+// PATCH /admin/users/:id/status — requires MANAGE_USERS. Deactivating blocks that
+// user's login but preserves their loan/reservation/favourite history. The backend
+// also rejects an admin deactivating their own account.
+export async function updateUserStatus(id: string, isActive: boolean): Promise<AdminUser> {
+  const { data } = await apiClient.patch<AdminUser>(`/admin/users/${id}/status`, { isActive })
+  return data
+}
+
+export interface CreateUserPayload {
+  email: string
+  password: string
+  firstName: string
+  lastName: string
+  dob: string
+  role: Role
+}
+
+// POST /admin/users — requires CREATE_USERS. The role the caller may assign is
+// capped server-side (LIBRARIAN can only create STAFF/MEMBER; SUPER_ADMIN can create
+// any role) - a request for a role above that ceiling gets a 403.
+export async function createUser(payload: CreateUserPayload): Promise<AdminUser> {
+  const { data } = await apiClient.post<AdminUser>('/admin/users', payload)
   return data
 }
 

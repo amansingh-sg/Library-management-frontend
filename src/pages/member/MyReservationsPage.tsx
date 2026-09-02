@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { CalendarClock, PackageCheck } from 'lucide-react'
-import { cancelReservation, fulfillReservation, getMyReservations } from '@/api/reservations.api'
+import {
+  cancelReservation,
+  fulfillReservation,
+  getMyReservations,
+  type ReservationSortBy,
+  type SortOrder,
+} from '@/api/reservations.api'
 import { getBooks } from '@/api/books.api'
 import { getErrorMessage } from '@/api/client'
 import { PageHeader } from '@/components/member/PageHeader'
 import { Table, type Column } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
+import { Select } from '@/components/ui/Select'
+import { StatusPills } from '@/components/ui/StatusPills'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -25,9 +33,33 @@ function expiryHint(reservation: Reservation): string | null {
   return hours <= 1 ? 'Expires soon' : `Expires in ~${hours}h`
 }
 
+interface SortOption {
+  value: string
+  label: string
+  sortBy: ReservationSortBy
+  sortOrder: SortOrder
+}
+
+const SORT_OPTIONS: SortOption[] = [
+  { value: 'reservedAt-desc', label: 'Newest reservations first', sortBy: 'reservedAt', sortOrder: 'DESC' },
+  { value: 'reservedAt-asc', label: 'Oldest reservations first', sortBy: 'reservedAt', sortOrder: 'ASC' },
+  { value: 'status-asc', label: 'Group by status', sortBy: 'status', sortOrder: 'ASC' },
+]
+
+const STATUS_OPTIONS: { value: ReservationStatus | ''; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: ReservationStatus.WAITING, label: 'Waiting' },
+  { value: ReservationStatus.READY, label: 'Ready' },
+  { value: ReservationStatus.FULFILLED, label: 'Fulfilled' },
+  { value: ReservationStatus.CANCELLED, label: 'Cancelled' },
+  { value: ReservationStatus.EXPIRED, label: 'Expired' },
+]
+
 export default function MyReservationsPage() {
   const [page, setPage] = useState<PaginatedResponse<Reservation> | null>(null)
   const [pageNumber, setPageNumber] = useState(1)
+  const [sortValue, setSortValue] = useState(SORT_OPTIONS[0].value)
+  const [statusFilter, setStatusFilter] = useState<ReservationStatus | ''>('')
   const [bookTitleById, setBookTitleById] = useState<Map<string, string>>(new Map())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -35,13 +67,22 @@ export default function MyReservationsPage() {
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null)
 
   const reservations = page?.data ?? []
+  const activeSort = SORT_OPTIONS.find((o) => o.value === sortValue) ?? SORT_OPTIONS[0]
 
   const load = useCallback(() => {
     setIsLoading(true)
     setError(null)
     // Books are fetched in full here (not paginated) — it's a title lookup map, not the
     // list this page paginates.
-    Promise.all([getMyReservations({ page: pageNumber }), getBooks({}, { perPage: 500 })])
+    Promise.all([
+      getMyReservations({
+        page: pageNumber,
+        sortBy: activeSort.sortBy,
+        sortOrder: activeSort.sortOrder,
+        status: statusFilter || undefined,
+      }),
+      getBooks({}, { perPage: 500 }),
+    ])
       .then(([reservationResult, books]) => {
         setPage(reservationResult)
         setBookTitleById(new Map(books.data.map((b) => [b.id, b.title])))
@@ -49,7 +90,11 @@ export default function MyReservationsPage() {
       .catch((err) => setError(getErrorMessage(err, 'Unable to load your reservations.')))
       .finally(() => setIsLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageNumber])
+  }, [pageNumber, sortValue, statusFilter])
+
+  useEffect(() => {
+    setPageNumber(1)
+  }, [sortValue, statusFilter])
 
   useEffect(() => {
     load()
@@ -144,6 +189,20 @@ export default function MyReservationsPage() {
   return (
     <div>
       <PageHeader title="My Reservations" description="Books you're waiting on, or ready to collect." />
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <StatusPills options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
+        <div className="w-56">
+          <Select label="Sort by" value={sortValue} onChange={(e) => setSortValue(e.target.value)}>
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+
       {reservations.length === 0 ? (
         <EmptyState
           icon={CalendarClock}

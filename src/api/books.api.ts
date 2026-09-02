@@ -1,14 +1,19 @@
 import { apiClient } from './client'
 import type { Book, CreateBookPayload, PageParams, PaginatedResponse } from '@/types/models'
 
+export type BookSortBy = 'title' | 'author' | 'publishedYear' | 'availableCopies' | 'createdAt'
+export type SortOrder = 'ASC' | 'DESC'
+
 export interface BookFilters {
   search?: string
   title?: string
   author?: string
   category?: string
+  sortBy?: BookSortBy
+  sortOrder?: SortOrder
 }
 
-// GET /books?search=&title=&author=&category=&page=&per_page=
+// GET /books?search=&title=&author=&category=&sortBy=&sortOrder=&page=&per_page=
 export async function getBooks(
   filters: BookFilters = {},
   { page, perPage }: PageParams = {},
@@ -36,4 +41,11 @@ export async function createBook(payload: CreateBookPayload): Promise<Book> {
 // DELETE /books/:id — requires MANAGE_BOOKS, soft delete
 export async function deleteBook(id: string): Promise<void> {
   await apiClient.delete(`/books/${id}`)
+}
+
+// PATCH /books/:id/copies — requires MANAGE_BOOKS, raises totalCopies and
+// availableCopies by `count` (restocking, not a replacement value)
+export async function addBookCopies(id: string, count: number): Promise<Book> {
+  const { data } = await apiClient.patch<Book>(`/books/${id}/copies`, { count })
+  return data
 }

@@ -13,6 +13,7 @@ import {
 import { getDashboardSummary, getOverdueLoans } from '@/api/analytics.api'
 import { getErrorMessage } from '@/api/client'
 import { KpiCard } from '@/components/ui/KpiCard'
+import { Badge } from '@/components/ui/Badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -192,7 +193,16 @@ export default function LibraryDashboard() {
                       {loan.email} · due {formatDate(loan.due_at)}
                     </p>
                   </div>
-                  <span className="shrink-0 text-sm font-semibold text-red-600">{formatFine(loan.fineAmount)}</span>
+                  {loan.fineAmount > 0 ? (
+                    <span className="shrink-0 text-sm font-semibold text-red-600">{formatFine(loan.fineAmount)}</span>
+                  ) : Number(loan.fine_paid_amount) > 0 ? (
+                    // Every row here is still ACTIVE and past its due date (see
+                    // getOverdueLoans), so a fineAmount of 0 can only mean the fine
+                    // was already paid off - never "no fine ever accrued". Without
+                    // this, a settled loan showed a bare red "0.00" indistinguishable
+                    // from an error, mixed in among genuinely-still-owing loans.
+                    <Badge tone="green">Fine paid</Badge>
+                  ) : null}
                 </li>
               ))}
             </ul>

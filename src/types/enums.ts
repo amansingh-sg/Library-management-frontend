@@ -1,18 +1,18 @@
 // Mirrors src/database/model/role.enum.ts on the backend — verified against source.
-// STAFF was removed (migration RemoveStaffRole1787900000002): it granted no capability
-// beyond MEMBER in practice, since every "act on behalf of another member" action was
-// hardcoded self-service only elsewhere in the backend. Its meaningful grants were
-// folded into LIBRARIAN.
+// STAFF was reintroduced by migration ReintroduceStaffRole1787900000003 with a real,
+// distinct grant (catalogue management — add/delete books) after being removed
+// earlier (migration RemoveStaffRole1787900000002) for having none.
 export const Role = {
   MEMBER: 'MEMBER',
+  STAFF: 'STAFF',
   LIBRARIAN: 'LIBRARIAN',
   SUPER_ADMIN: 'SUPER_ADMIN',
 } as const
 export type Role = (typeof Role)[keyof typeof Role]
 
 // Mirrors ROLE_HIERARCHY in src/database/model/role.enum.ts — each role inherits every
-// permission of the role before it (MEMBER -> LIBRARIAN -> SUPER_ADMIN).
-export const ROLE_HIERARCHY: Role[] = [Role.MEMBER, Role.LIBRARIAN, Role.SUPER_ADMIN]
+// permission of the role before it (MEMBER -> STAFF -> LIBRARIAN -> SUPER_ADMIN).
+export const ROLE_HIERARCHY: Role[] = [Role.MEMBER, Role.STAFF, Role.LIBRARIAN, Role.SUPER_ADMIN]
 
 // Every role from MEMBER up to and including `role`, ascending by privilege.
 export function getRoleChain(role: Role): Role[] {
@@ -31,11 +31,16 @@ export const Permission = {
   RETURN_LOANS: 'RETURN_LOANS',
   RENEW_LOANS: 'RENEW_LOANS',
   MANAGE_LOANS: 'MANAGE_LOANS',
+  VIEW_ALL_LOANS: 'VIEW_ALL_LOANS',
   CREATE_RESERVATION: 'CREATE_RESERVATION',
   VIEW_OWN_RESERVATIONS: 'VIEW_OWN_RESERVATIONS',
   MANAGE_RESERVATIONS: 'MANAGE_RESERVATIONS',
+  VIEW_ALL_RESERVATIONS: 'VIEW_ALL_RESERVATIONS',
   MANAGE_MEMBERS: 'MANAGE_MEMBERS',
   MANAGE_USERS: 'MANAGE_USERS',
+  CREATE_USERS: 'CREATE_USERS',
+  VIEW_LIBRARY_ANALYTICS: 'VIEW_LIBRARY_ANALYTICS',
+  VIEW_ALL_FAVOURITES: 'VIEW_ALL_FAVOURITES',
   MANAGE_ROLE_PERMISSIONS: 'MANAGE_ROLE_PERMISSIONS',
   FULL_SYSTEM_ACCESS: 'FULL_SYSTEM_ACCESS',
 } as const
@@ -56,7 +61,7 @@ export type ReservationStatus = (typeof ReservationStatus)[keyof typeof Reservat
 export type LoanStatus = 'ACTIVE' | 'RETURNED' | 'OVERDUE'
 
 // Each role's OWN default permissions (not cumulative) — mirrors the base grants seeded
-// by migration 1787900000001-MakeRolePermissionsCumulative.ts. Roles are cumulative by
+// by migration 1787900000003-ReintroduceStaffRole.ts. Roles are cumulative by
 // hierarchy (see ROLE_HIERARCHY above): a role also inherits every base permission of
 // every role before it in the chain — see DEFAULT_ROLE_PERMISSIONS below.
 //
@@ -74,14 +79,21 @@ const BASE_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.CREATE_RESERVATION,
     Permission.VIEW_OWN_RESERVATIONS,
   ],
+  [Role.STAFF]: [
+    Permission.MANAGE_BOOKS,
+    Permission.VIEW_ALL_LOANS,
+    Permission.VIEW_ALL_RESERVATIONS,
+    Permission.VIEW_ALL_FAVOURITES,
+  ],
   [Role.LIBRARIAN]: [
     Permission.ISSUE_LOANS,
     Permission.RETURN_LOANS,
     Permission.RENEW_LOANS,
-    Permission.MANAGE_RESERVATIONS,
-    Permission.MANAGE_BOOKS,
     Permission.MANAGE_LOANS,
+    Permission.MANAGE_RESERVATIONS,
     Permission.MANAGE_MEMBERS,
+    Permission.VIEW_LIBRARY_ANALYTICS,
+    Permission.CREATE_USERS,
   ],
   [Role.SUPER_ADMIN]: [Permission.MANAGE_USERS, Permission.MANAGE_ROLE_PERMISSIONS, Permission.FULL_SYSTEM_ACCESS],
 }

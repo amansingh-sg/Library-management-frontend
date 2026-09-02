@@ -9,7 +9,7 @@ import { Permission } from '@/types/enums'
 
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
-import VerifyEmailPage from '@/pages/auth/VerifyEmailPage'
+import VerifyOtpPage from '@/pages/auth/VerifyOtpPage'
 import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
 import DashboardPage from '@/pages/member/DashboardPage'
@@ -18,8 +18,11 @@ import BookDetailsPage from '@/pages/member/BookDetailsPage'
 import MyLoansPage from '@/pages/member/MyLoansPage'
 import MyReservationsPage from '@/pages/member/MyReservationsPage'
 import FavouritesPage from '@/pages/member/FavouritesPage'
+import MyAnalyticsPage from '@/pages/member/MyAnalyticsPage'
+import ProfilePage from '@/pages/ProfilePage'
 import LoansManagementPage from '@/pages/library/LoansManagementPage'
 import ReservationsManagementPage from '@/pages/library/ReservationsManagementPage'
+import FavouritesManagementPage from '@/pages/library/FavouritesManagementPage'
 import UsersPage from '@/pages/admin/UsersPage'
 import RolePermissionsPage from '@/pages/admin/RolePermissionsPage'
 import AnalyticsPage from '@/pages/analytics/AnalyticsPage'
@@ -35,7 +38,7 @@ export default function App() {
           <Route element={<AuthLayout />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
-            <Route path="/user-email-verification/:uniqueKey" element={<VerifyEmailPage />} />
+            <Route path="/verify-otp" element={<VerifyOtpPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
           </Route>
@@ -48,11 +51,13 @@ export default function App() {
               <Route path="/my-loans" element={<MyLoansPage />} />
               <Route path="/my-reservations" element={<MyReservationsPage />} />
               <Route path="/favourites" element={<FavouritesPage />} />
+              <Route path="/my-analytics" element={<MyAnalyticsPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
 
               <Route
                 path="/loans"
                 element={
-                  <RequirePermission anyOf={[Permission.MANAGE_LOANS]}>
+                  <RequirePermission anyOf={[Permission.MANAGE_LOANS, Permission.VIEW_ALL_LOANS]}>
                     <LoansManagementPage />
                   </RequirePermission>
                 }
@@ -60,8 +65,16 @@ export default function App() {
               <Route
                 path="/reservations"
                 element={
-                  <RequirePermission anyOf={[Permission.MANAGE_RESERVATIONS]}>
+                  <RequirePermission anyOf={[Permission.MANAGE_RESERVATIONS, Permission.VIEW_ALL_RESERVATIONS]}>
                     <ReservationsManagementPage />
+                  </RequirePermission>
+                }
+              />
+              <Route
+                path="/favourites-overview"
+                element={
+                  <RequirePermission anyOf={[Permission.VIEW_LIBRARY_ANALYTICS, Permission.VIEW_ALL_FAVOURITES]}>
+                    <FavouritesManagementPage />
                   </RequirePermission>
                 }
               />
@@ -85,7 +98,7 @@ export default function App() {
               <Route
                 path="/analytics"
                 element={
-                  <RequirePermission anyOf={[Permission.MANAGE_BOOKS]}>
+                  <RequirePermission anyOf={[Permission.VIEW_LIBRARY_ANALYTICS]}>
                     <AnalyticsPage />
                   </RequirePermission>
                 }

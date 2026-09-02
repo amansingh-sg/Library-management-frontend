@@ -53,12 +53,19 @@ export function getErrorMessage(error: unknown, fallback = 'Something went wrong
   if (axios.isAxiosError(error)) {
     const axiosError = error as AxiosError<Partial<Envelope<unknown>> & { message?: string }>
     const data = axiosError.response?.data
-    if (data?.message) return data.message
+    // Validation errors (Joi, via HttpRequestValidator) always carry the generic string
+    // "Validation Error" as the top-level `message` — the actually useful, field-specific
+    // text ("password must be 8 characters long") is in `data` (an array of
+    // {message,label}). Must check this FIRST: checking data.message first (as this used
+    // to) always wins since it's always truthy, so the specific message was dead code —
+    // every validation failure on the site showed the same unhelpful "Validation Error"
+    // toast regardless of what actually went wrong.
     if (Array.isArray((data as { data?: unknown })?.data)) {
       const validationErrors = (data as { data: Array<{ message?: string }> }).data
       const first = validationErrors[0]?.message
       if (first) return first
     }
+    if (data?.message) return data.message
     if (axiosError.message) return axiosError.message
   }
   if (error instanceof Error) return error.message

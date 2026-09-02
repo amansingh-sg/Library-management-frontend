@@ -67,8 +67,10 @@ export default function RegisterPage() {
         dob: form.dob,
         marketing: form.marketing,
       })
-      toast.success("Account created! We've sent a verification link to your email.")
-      navigate('/', { replace: true })
+      toast.success('Account created! Check your email for a 6-digit code to verify.', {
+        duration: 6000,
+      })
+      navigate('/verify-otp', { replace: true, state: { email: form.email.trim() } })
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to create your account. Please try again.'))
     } finally {

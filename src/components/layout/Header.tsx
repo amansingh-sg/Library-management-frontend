@@ -1,4 +1,4 @@
-import { Menu as MenuIcon, ChevronDown, LogOut } from 'lucide-react'
+import { Menu as MenuIcon, ChevronDown, LogOut, UserCircle } from 'lucide-react'
 import { Menu, MenuButton, MenuItem, MenuItems, Transition } from '@headlessui/react'
 import { Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -52,6 +52,20 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
           leaveTo="transform opacity-0 scale-95"
         >
           <MenuItems className="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-lg border border-slate-200 bg-white py-1 shadow-lg focus:outline-none">
+            <MenuItem>
+              {({ focus }) => (
+                <button
+                  onClick={() => navigate('/profile')}
+                  className={cn(
+                    'flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700',
+                    focus && 'bg-slate-50',
+                  )}
+                >
+                  <UserCircle className="size-4" />
+                  Profile
+                </button>
+              )}
+            </MenuItem>
             <MenuItem>
               {({ focus }) => (
                 <button

@@ -17,10 +17,16 @@ export interface NavItem {
   icon: ComponentType<{ className?: string }>
   anyOf?: Permission[]
   // Hides this item for the given roles even if they hold the required permission -
-  // e.g. LIBRARIAN/SUPER_ADMIN inherit VIEW_OWN_LOANS from MEMBER, but should see the
-  // all-members "Loans" management view instead of a personal "My Loans" page.
+  // e.g. STAFF/LIBRARIAN/SUPER_ADMIN inherit VIEW_OWN_LOANS from MEMBER, but should
+  // see the all-members "Loans" management view instead of a personal "My Loans"
+  // page. STAFF's read-only "circulation desk" view (VIEW_ALL_LOANS/
+  // VIEW_ALL_RESERVATIONS/VIEW_ALL_FAVOURITES - see FixStaffLibraryVisibility
+  // migration) already surfaces the equivalent libraryNav items below, so hiding
+  // these doesn't leave STAFF without a way to see loans/reservations/favourites.
   hiddenForRoles?: Role[]
 }
+
+const STAFF_AND_ABOVE = [Role.STAFF, Role.LIBRARIAN, Role.SUPER_ADMIN]
 
 export const memberNav: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: LayoutDashboard },
@@ -30,21 +36,51 @@ export const memberNav: NavItem[] = [
     to: '/my-loans',
     icon: Library,
     anyOf: [Permission.VIEW_OWN_LOANS],
-    hiddenForRoles: [Role.LIBRARIAN, Role.SUPER_ADMIN],
+    hiddenForRoles: STAFF_AND_ABOVE,
   },
   {
     label: 'My Reservations',
     to: '/my-reservations',
     icon: CalendarClock,
     anyOf: [Permission.VIEW_OWN_RESERVATIONS],
-    hiddenForRoles: [Role.LIBRARIAN, Role.SUPER_ADMIN],
+    hiddenForRoles: STAFF_AND_ABOVE,
   },
-  { label: 'Favourites', to: '/favourites', icon: Heart },
+  {
+    label: 'Favourites',
+    to: '/favourites',
+    icon: Heart,
+    hiddenForRoles: STAFF_AND_ABOVE,
+  },
+  {
+    label: 'My Analytics',
+    to: '/my-analytics',
+    icon: BarChart3,
+    // Same reasoning as the personal loans/reservations/favourites pages above -
+    // STAFF/LIBRARIAN/SUPER_ADMIN see the library-wide Analytics page (analyticsNav
+    // below) instead of a personal one.
+    hiddenForRoles: STAFF_AND_ABOVE,
+  },
 ]
 
 export const libraryNav: NavItem[] = [
-  { label: 'Loans', to: '/loans', icon: Library, anyOf: [Permission.MANAGE_LOANS] },
-  { label: 'Reservations', to: '/reservations', icon: CalendarClock, anyOf: [Permission.MANAGE_RESERVATIONS] },
+  {
+    label: 'Loans',
+    to: '/loans',
+    icon: Library,
+    anyOf: [Permission.MANAGE_LOANS, Permission.VIEW_ALL_LOANS],
+  },
+  {
+    label: 'Reservations',
+    to: '/reservations',
+    icon: CalendarClock,
+    anyOf: [Permission.MANAGE_RESERVATIONS, Permission.VIEW_ALL_RESERVATIONS],
+  },
+  {
+    label: 'Favourites',
+    to: '/favourites-overview',
+    icon: Heart,
+    anyOf: [Permission.VIEW_LIBRARY_ANALYTICS, Permission.VIEW_ALL_FAVOURITES],
+  },
 ]
 
 export const adminNav: NavItem[] = [
@@ -58,5 +94,5 @@ export const adminNav: NavItem[] = [
 ]
 
 export const analyticsNav: NavItem[] = [
-  { label: 'Analytics', to: '/analytics', icon: BarChart3, anyOf: [Permission.MANAGE_BOOKS] },
+  { label: 'Analytics', to: '/analytics', icon: BarChart3, anyOf: [Permission.VIEW_LIBRARY_ANALYTICS] },
 ]

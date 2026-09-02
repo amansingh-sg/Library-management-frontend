@@ -66,13 +66,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applySession],
   )
 
-  const register = useCallback(
-    async (payload: RegisterPayload) => {
-      const session = await authApi.register(payload)
-      applySession(session.token)
-    },
-    [applySession],
-  )
+  const register = useCallback(async (payload: RegisterPayload) => {
+    // No token to apply - the account isn't verified yet, so it isn't logged in.
+    // The user must enter the 6-digit code emailed to them, which does log them
+    // in (see VerifyOtpPage).
+    await authApi.register(payload)
+  }, [])
 
   const logout = useCallback(() => {
     clearSession()
