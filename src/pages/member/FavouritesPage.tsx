@@ -21,6 +21,8 @@ const SORT_OPTIONS: { value: SortOrder; label: string }[] = [
   { value: 'ASC', label: 'Oldest favourites first' },
 ]
 
+// Paginated grid of the current member's saved/favourited books, with a remove
+// action on each card.
 export default function FavouritesPage() {
   const [page, setPage] = useState<PaginatedResponse<Favourite> | null>(null)
   const [pageNumber, setPageNumber] = useState(1)

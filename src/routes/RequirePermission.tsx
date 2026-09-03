@@ -8,6 +8,9 @@ interface RequirePermissionProps {
   children: ReactNode
 }
 
+// Route guard: renders `children` only if the current user holds at least one of
+// the given permissions, otherwise redirects to a 403 page. This is a UI-only gate
+// (see hasPermission's note in AuthContext) - the backend enforces the real check.
 export function RequirePermission({ anyOf, children }: RequirePermissionProps) {
   const { hasPermission } = useAuth()
 

@@ -4,6 +4,9 @@ import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 
 export function AppLayout() {
+  // Only used on small screens: the Sidebar renders as an off-canvas drawer there,
+  // toggled by the Header's menu button and closed via the Sidebar's own backdrop/
+  // close button. On large screens the sidebar is always visible and this is unused.
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (

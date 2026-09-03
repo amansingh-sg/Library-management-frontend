@@ -1,7 +1,7 @@
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { jwtDecode } from 'jwt-decode'
 import * as authApi from '@/api/auth.api'
-import { clearSession, getToken, setSession } from '@/utils/session'
+import { clearSession, getRefreshToken, getToken, setSession } from '@/utils/session'
 import { DEFAULT_ROLE_PERMISSIONS, type Permission, type Role } from '@/types/enums'
 import type { AuthTokenPayload, LoginPayload, RegisterPayload } from '@/types/models'
 
@@ -18,6 +18,11 @@ interface AuthContextValue {
   login: (payload: LoginPayload) => Promise<void>
   register: (payload: RegisterPayload) => Promise<void>
   logout: () => void
+  // NOTE: hasPermission/hasRole are UI-convenience checks only (e.g. hiding a nav
+  // link or button a user isn't meant to see). They are NOT real security - the
+  // backend independently re-checks every permission on every request and returns
+  // 403 if the live grant differs, so a stale/wrong result here can only ever
+  // hide/show something incorrectly, never bypass real authorization.
   hasPermission: (...permissions: Permission[]) => boolean
   hasRole: (...roles: Role[]) => boolean
 }
@@ -41,15 +46,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const token = getToken()
-    if (token) {
-      const decoded = decodeUser(token)
-      if (decoded) {
-        setUser(decoded)
-      } else {
-        clearSession()
-      }
+    if (!token) {
+      setIsInitializing(false)
+      return
     }
-    setIsInitializing(false)
+
+    const decoded = decodeUser(token)
+    if (decoded) {
+      setUser(decoded)
+      setIsInitializing(false)
+      return
+    }
+
+    // Access token expired while the tab was closed/asleep (it only lives 15
+    // minutes) - try the refresh token (valid 7 days) before giving up and
+    // logging the user out.
+    const refreshToken = getRefreshToken()
+    if (!refreshToken) {
+      clearSession()
+      setIsInitializing(false)
+      return
+    }
+
+    authApi
+      .refreshAccessToken(refreshToken)
+      .then((session) => {
+        setSession(session.token)
+        setUser(decodeUser(session.token))
+      })
+      .catch(() => {
+        clearSession()
+      })
+      .finally(() => {
+        setIsInitializing(false)
+      })
   }, [])
 
   const applySession = useCallback((token: string, refreshToken?: string) => {
@@ -60,6 +90,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (payload: LoginPayload) => {
+      // The access token (short-lived, ~15 min) is what gets sent on every request;
+      // the refresh token (long-lived, 7 days) is only ever used to silently obtain
+      // a new access token - see performRefresh in api/client.ts.
       const session = await authApi.login(payload)
       applySession(session.token, session.refreshToken)
     },

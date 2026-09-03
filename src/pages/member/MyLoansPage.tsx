@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { AlertTriangle, Library, RotateCw } from 'lucide-react'
+import { AlertTriangle, Clock, Library, Loader2, PackageCheck, RotateCw } from 'lucide-react'
 import { getMyLoans, renewLoan, returnLoan, type LoanSortBy, type LoanStatusFilter, type SortOrder } from '@/api/loans.api'
 import { getBooks } from '@/api/books.api'
 import { getErrorMessage } from '@/api/client'
@@ -42,10 +42,16 @@ const STATUS_OPTIONS: { value: LoanStatusFilter | ''; label: string }[] = [
   { value: '', label: 'All' },
   { value: 'ACTIVE', label: 'Active' },
   { value: 'OVERDUE', label: 'Overdue' },
+  { value: 'RETURN_REQUESTED', label: 'Return requested' },
   { value: 'RETURNED', label: 'Returned' },
+  { value: 'LOST', label: 'Lost' },
+  { value: 'DAMAGED', label: 'Damaged' },
   { value: 'FINE_PAID', label: 'Fine paid' },
 ]
 
+// Paginated list of the current member's loans, with status/sort filters. Members
+// can request a return or renew a loan; staff decide the actual returned condition
+// elsewhere (librarian confirmation flow), not here.
 export default function MyLoansPage() {
   const { hasPermission } = useAuth()
   const [page, setPage] = useState<PaginatedResponse<Loan> | null>(null)
@@ -85,10 +91,14 @@ export default function MyLoansPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageNumber, sortValue, statusFilter])
 
+  // Changing the sort or status filter jumps back to page 1, since staying on the
+  // current page could land past the end of the new, differently-sized result set.
   useEffect(() => {
     setPageNumber(1)
   }, [sortValue, statusFilter])
 
+  // Refetches whenever page, sort, or status filter changes (load() already depends
+  // on all three).
   useEffect(() => {
     load()
   }, [load])
@@ -98,7 +108,7 @@ export default function MyLoansPage() {
     setBusyLoanId(returnTarget.id)
     try {
       await returnLoan(returnTarget.id)
-      toast.success('Book returned. Thanks!')
+      toast.success('Return requested - a librarian will confirm it shortly.')
       setReturnTarget(null)
       load()
     } catch (err) {
@@ -145,31 +155,55 @@ export default function MyLoansPage() {
       },
       {
         header: 'Actions',
-        accessor: (loan) => (
-          <div className="flex items-center gap-2">
-            {loan.status !== 'RETURNED' && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setReturnTarget(loan)}
-                isLoading={busyLoanId === loan.id && returnTarget?.id === loan.id}
-              >
-                Return
-              </Button>
-            )}
-            {loan.status !== 'RETURNED' && canRenew && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => handleRenew(loan)}
-                isLoading={busyLoanId === loan.id && returnTarget?.id !== loan.id}
-              >
-                <RotateCw className="size-3.5" />
-                Renew
-              </Button>
-            )}
-          </div>
-        ),
+        className: 'text-right',
+        accessor: (loan) => {
+          // Only an open loan (still out, not yet requested/finalized) can be
+          // returned or renewed - see LoansService.returnLoan for the request/
+          // finalize split.
+          const isOpen = loan.status === 'ACTIVE' || loan.status === 'OVERDUE'
+          const isReturning = busyLoanId === loan.id && returnTarget?.id === loan.id
+          const isRenewing = busyLoanId === loan.id && returnTarget?.id !== loan.id
+
+          if (loan.status === 'RETURN_REQUESTED') {
+            return (
+              <span className="inline-flex items-center justify-end gap-1.5 text-xs font-medium text-amber-600">
+                <Clock className="size-3.5" />
+                Awaiting confirmation
+              </span>
+            )
+          }
+
+          return (
+            <div className="flex items-center justify-end gap-1.5">
+              {/* This only requests a return - the member never records the book's
+                  condition; a librarian confirms condition (and any fine) separately. */}
+              {isOpen && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setReturnTarget(loan)}
+                  isLoading={isReturning}
+                  className="gap-1.5"
+                >
+                  {!isReturning && <PackageCheck className="size-3.5" />}
+                  Return
+                </Button>
+              )}
+              {isOpen && canRenew && (
+                <button
+                  type="button"
+                  title="Renew loan"
+                  aria-label="Renew loan"
+                  disabled={Boolean(busyLoanId)}
+                  onClick={() => handleRenew(loan)}
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-600 disabled:opacity-40"
+                >
+                  {isRenewing ? <Loader2 className="size-4 animate-spin" /> : <RotateCw className="size-4" />}
+                </button>
+              )}
+            </div>
+          )
+        },
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -235,8 +269,8 @@ export default function MyLoansPage() {
       <ConfirmDialog
         open={Boolean(returnTarget)}
         title="Return this book?"
-        description={`Return "${returnTarget ? bookTitleById.get(returnTarget.bookId) ?? 'this book' : ''}"? This will free up a copy for other members.`}
-        confirmLabel="Return"
+        description={`Request a return for "${returnTarget ? bookTitleById.get(returnTarget.bookId) ?? 'this book' : ''}"? A librarian will confirm its condition before the copy is freed up for other members.`}
+        confirmLabel="Request return"
         isLoading={Boolean(busyLoanId) && busyLoanId === returnTarget?.id}
         onConfirm={handleReturn}
         onCancel={() => setReturnTarget(null)}

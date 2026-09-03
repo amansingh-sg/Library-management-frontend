@@ -4,14 +4,23 @@ import type { Loan, PageParams, PaginatedResponse } from '@/types/models'
 // 'status' sorts by the raw DB column (ACTIVE/RETURNED only). 'effectiveStatus' sorts
 // by the same derived status the API returns (OVERDUE included) - see
 // loans.repository.ts's SORT_COLUMNS for the SQL that computes it.
-export type LoanSortBy = 'borrowedAt' | 'dueAt' | 'status' | 'effectiveStatus' | 'book' | 'borrower'
+export type LoanSortBy = 'borrowedAt' | 'dueAt' | 'status' | 'effectiveStatus' | 'book' | 'borrower' | 'outstandingFine'
 export type SortOrder = 'ASC' | 'DESC'
 // Mutually exclusive with each other - matches exactly what the API's derived
-// `status` field ever shows (see loans.service.ts's getLoanStatus).
-// FINE_PAID isn't a loan status - it's "has a fine ever been recorded as paid on
-// this loan" (see loans.repository.ts's applyStatusFilter), orthogonal to
-// ACTIVE/OVERDUE/RETURNED.
-export type LoanStatusFilter = 'ACTIVE' | 'OVERDUE' | 'RETURNED' | 'FINE_PAID'
+// `status` field ever shows (see loans.service.ts's getLoanStatus). RETURN_REQUESTED
+// is a member's self-service return awaiting a librarian's condition check; LOST/
+// DAMAGED are the alternatives to RETURNED once that check happens (see
+// LoansService.returnLoan). FINE_PAID isn't a loan status - it's "has a fine ever
+// been recorded as paid on this loan" (see loans.repository.ts's applyStatusFilter),
+// orthogonal to the rest.
+export type LoanStatusFilter =
+  | 'ACTIVE'
+  | 'OVERDUE'
+  | 'RETURN_REQUESTED'
+  | 'RETURNED'
+  | 'LOST'
+  | 'DAMAGED'
+  | 'FINE_PAID'
 
 interface LoanSortParams {
   sortBy?: LoanSortBy
@@ -36,9 +45,15 @@ export async function issueLoan(userId: string, bookId: string): Promise<Loan> {
   return data
 }
 
-// POST /loans/:id/return — authenticated, ownership enforced server-side
-export async function returnLoan(id: string): Promise<Loan> {
-  const { data } = await apiClient.post<Loan>(`/loans/${id}/return`)
+export type LoanReturnCondition = 'GOOD' | 'LOST' | 'DAMAGED'
+
+// POST /loans/:id/return — authenticated, ownership enforced server-side.
+// `condition` is only meaningful (and only ever applied) when the caller holds
+// RETURN_LOANS/MANAGE_LOANS - a self-service member/STAFF call without it creates a
+// RETURN_REQUESTED pending review instead of finalising anything. See
+// LoansService.returnLoan.
+export async function returnLoan(id: string, condition?: LoanReturnCondition): Promise<Loan> {
+  const { data } = await apiClient.post<Loan>(`/loans/${id}/return`, condition ? { condition } : undefined)
   return data
 }
 
@@ -54,6 +69,15 @@ export async function renewLoan(id: string): Promise<Loan> {
 export async function payLoanFine(id: string): Promise<Loan> {
   const { data } = await apiClient.post<Loan>(`/loans/${id}/pay-fine`)
   return data
+}
+
+// DELETE /loans/:id — requires MANAGE_LOANS. Permanently removes the loan record - a
+// data-correction tool (a mistaken entry, bad test data), not the same as returning a
+// book. Frees the book's copy count back up if the loan was still ACTIVE/
+// RETURN_REQUESTED; a RETURNED/LOST/DAMAGED loan's copy count is untouched, since it
+// was already resolved when the loan was finalised.
+export async function deleteLoan(id: string): Promise<void> {
+  await apiClient.delete(`/loans/${id}`)
 }
 
 // GET /loans/me?sortBy=&sortOrder=&page=&per_page= — requires VIEW_OWN_LOANS. status includes derived "OVERDUE".

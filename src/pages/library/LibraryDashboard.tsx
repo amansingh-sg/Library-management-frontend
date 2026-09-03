@@ -42,6 +42,10 @@ interface QuickLink {
   hint: string
 }
 
+// Landing page for staff/librarians/admins after login - a library-wide overview,
+// not a member's personal dashboard. On mount it loads the summary KPIs (books,
+// members, active/overdue loans, outstanding fines) and the list of overdue loans
+// used to build the "Most Overdue" panel below.
 export default function LibraryDashboard() {
   const { user } = useAuth()
   const [summary, setSummary] = useState<DashboardSummary | null>(null)

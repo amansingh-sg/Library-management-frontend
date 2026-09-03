@@ -29,8 +29,8 @@ export function daysUntil(value: string): number {
   return Math.ceil(diffMs / (1000 * 60 * 60 * 24))
 }
 
-// The backend fine rate has no currency attached (see fine-calculator.ts) — format as a
-// plain amount rather than implying a specific currency.
+// The backend fine rate itself has no currency attached (see fine-calculator.ts), but
+// the product is priced in rupees, so every fine display uses the ₹ symbol.
 export function formatFine(amount: number): string {
-  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return `₹${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }

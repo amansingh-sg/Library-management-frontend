@@ -51,6 +51,10 @@ const STATUS_OPTIONS: { value: ReservationStatus | ''; label: string }[] = [
   { value: ReservationStatus.EXPIRED, label: 'Expired' },
 ]
 
+// Staff-facing view of every reservation in the library (not just the current
+// user's own). STAFF can view only; LIBRARIAN and above can mark a ready
+// reservation as collected or cancel one. On mount it loads the current page of
+// reservations plus the full book and user lists used as lookup maps for the table.
 export default function ReservationsManagementPage() {
   const { hasPermission } = useAuth()
   // STAFF sees this page read-only (VIEW_ALL_RESERVATIONS, no action permissions) -

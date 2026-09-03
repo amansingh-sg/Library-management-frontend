@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { CircleDollarSign, Library, Plus, RotateCw, Search } from 'lucide-react'
+import { CircleDollarSign, Library, Loader2, PackageCheck, Plus, RotateCw, Search, Trash2 } from 'lucide-react'
 import {
+  deleteLoan,
   getAllLoans,
   issueLoan,
   payLoanFine,
   renewLoan,
   returnLoan,
+  type LoanReturnCondition,
   type LoanSortBy,
   type LoanStatusFilter,
   type SortOrder,
@@ -53,16 +55,24 @@ const SORT_OPTIONS: SortOption[] = [
   { value: 'book-desc', label: 'Book title (Z–A)', sortBy: 'book', sortOrder: 'DESC' },
   { value: 'borrower-asc', label: 'Borrower name (A–Z)', sortBy: 'borrower', sortOrder: 'ASC' },
   { value: 'borrower-desc', label: 'Borrower name (Z–A)', sortBy: 'borrower', sortOrder: 'DESC' },
+  { value: 'outstandingFine-desc', label: 'Highest overdue fine first', sortBy: 'outstandingFine', sortOrder: 'DESC' },
 ]
 
 const STATUS_OPTIONS: { value: LoanStatusFilter | ''; label: string }[] = [
   { value: '', label: 'All' },
   { value: 'ACTIVE', label: 'Active' },
   { value: 'OVERDUE', label: 'Overdue' },
+  { value: 'RETURN_REQUESTED', label: 'Return requested' },
   { value: 'RETURNED', label: 'Returned' },
+  { value: 'LOST', label: 'Lost' },
+  { value: 'DAMAGED', label: 'Damaged' },
   { value: 'FINE_PAID', label: 'Fine paid' },
 ]
 
+// Staff-facing view of every loan in the library (not just the current user's own).
+// STAFF can view only; LIBRARIAN and above can issue, renew, return, pay fines and
+// delete loans. On mount it loads the current page of loans plus the full book and
+// user lists (used as lookup maps for titles/borrower names in the table).
 export default function LoansManagementPage() {
   const { hasPermission } = useAuth()
   // STAFF sees this page read-only (VIEW_ALL_LOANS, no action permissions) - LIBRARIAN+
@@ -83,6 +93,8 @@ export default function LoansManagementPage() {
   const [returnTarget, setReturnTarget] = useState<Loan | null>(null)
   const [payFineTarget, setPayFineTarget] = useState<Loan | null>(null)
   const [isPayingFine, setIsPayingFine] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Loan | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   // Keeps rendering the last real target's details while the dialog closes (its exit
   // animation briefly keeps the panel mounted after payFineTarget resets to null) so
   // it never flashes empty/undefined text - same reasoning as UsersPage's
@@ -148,12 +160,16 @@ export default function LoansManagementPage() {
     return `${user.firstName} ${user.lastName} (${user.email})`
   }
 
-  async function handleReturn() {
+  async function handleReturn(condition: LoanReturnCondition) {
     if (!returnTarget) return
     setBusyLoanId(returnTarget.id)
     try {
-      await returnLoan(returnTarget.id)
-      toast.success('Loan marked as returned.')
+      await returnLoan(returnTarget.id, condition)
+      toast.success(
+        condition === 'GOOD'
+          ? 'Loan marked as returned.'
+          : `Loan closed - book recorded as ${condition.toLowerCase()}.`,
+      )
       setReturnTarget(null)
       load()
     } catch (err) {
@@ -203,6 +219,9 @@ export default function LoansManagementPage() {
     }
   }
 
+  // Records the currently-outstanding fine as paid. This only settles what's owed
+  // right now - it doesn't close the loan, so if the loan is still out and overdue
+  // it can keep accruing a new fine afterwards (see the dialog copy below).
   async function handlePayFine() {
     if (!payFineTarget) return
     setIsPayingFine(true)
@@ -215,6 +234,27 @@ export default function LoansManagementPage() {
       toast.error(getErrorMessage(err, 'Unable to record this fine as paid.'))
     } finally {
       setIsPayingFine(false)
+    }
+  }
+
+  // Hard-deletes the loan record entirely - this is a data-correction tool for a
+  // mistaken entry, not a way to process a real return (that's handleReturn above,
+  // which closes the loan but keeps its history). The backend only restores the
+  // book's available-copy count here if the loan was still open (ACTIVE/OVERDUE/
+  // RETURN_REQUESTED); deleting an already-closed loan record doesn't touch it, since
+  // that copy was already accounted for when the loan closed.
+  async function handleDeleteLoan() {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    try {
+      await deleteLoan(deleteTarget.id)
+      toast.success('Loan record deleted.')
+      setDeleteTarget(null)
+      load()
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Unable to delete this loan.'))
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -253,44 +293,83 @@ export default function LoansManagementPage() {
         ? [
             {
               header: 'Actions',
-              accessor: (loan: Loan) => (
-                <div className="flex items-center gap-2">
-                  {loan.status !== 'RETURNED' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setReturnTarget(loan)}
-                      isLoading={busyLoanId === loan.id && returnTarget?.id === loan.id}
+              className: 'text-right',
+              accessor: (loan: Loan) => {
+                // A librarian/admin can finalize a desk return (ACTIVE/OVERDUE) or
+                // confirm a member's pending request (RETURN_REQUESTED) - both go
+                // through the same condition-check dialog below. Renewing only makes
+                // sense for a loan that's still genuinely out, not one already
+                // mid-return.
+                const canFinalize =
+                  loan.status === 'ACTIVE' || loan.status === 'OVERDUE' || loan.status === 'RETURN_REQUESTED'
+                const canRenewThis = loan.status === 'ACTIVE' || loan.status === 'OVERDUE'
+
+                const isReturning = busyLoanId === loan.id && returnTarget?.id === loan.id
+                const isRenewing = busyLoanId === loan.id && returnTarget?.id !== loan.id
+
+                return (
+                  <div className="flex items-center justify-end gap-1">
+                    {canFinalize && (
+                      <Button
+                        size="sm"
+                        variant={loan.status === 'RETURN_REQUESTED' ? 'primary' : 'outline'}
+                        onClick={() => setReturnTarget(loan)}
+                        isLoading={isReturning}
+                        className="gap-1.5"
+                      >
+                        {!isReturning && <PackageCheck className="size-3.5" />}
+                        {loan.status === 'RETURN_REQUESTED' ? 'Confirm' : 'Return'}
+                      </Button>
+                    )}
+
+                    {(canRenewThis || loan.fineAmount > 0) && canFinalize && (
+                      <span className="mx-1 h-5 w-px bg-slate-200" aria-hidden="true" />
+                    )}
+
+                    {canRenewThis && (
+                      <button
+                        type="button"
+                        title="Renew loan"
+                        aria-label="Renew loan"
+                        disabled={Boolean(busyLoanId)}
+                        onClick={() => handleRenew(loan)}
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-600 disabled:opacity-40"
+                      >
+                        {isRenewing ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <RotateCw className="size-4" />
+                        )}
+                      </button>
+                    )}
+
+                    {loan.fineAmount > 0 && (
+                      <button
+                        type="button"
+                        title="Record fine as paid"
+                        aria-label="Record fine as paid"
+                        onClick={() => {
+                          setPayFineTarget(loan)
+                          setPayFineDialogLoan(loan)
+                        }}
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
+                      >
+                        <CircleDollarSign className="size-4" />
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      title="Delete loan record"
+                      aria-label="Delete loan record"
+                      onClick={() => setDeleteTarget(loan)}
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
                     >
-                      Return
-                    </Button>
-                  )}
-                  {loan.status !== 'RETURNED' && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleRenew(loan)}
-                      isLoading={busyLoanId === loan.id && returnTarget?.id !== loan.id}
-                    >
-                      <RotateCw className="size-3.5" />
-                      Renew
-                    </Button>
-                  )}
-                  {loan.fineAmount > 0 && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setPayFineTarget(loan)
-                        setPayFineDialogLoan(loan)
-                      }}
-                    >
-                      <CircleDollarSign className="size-3.5" />
-                      Pay fine
-                    </Button>
-                  )}
-                </div>
-              ),
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                )
+              },
             },
           ]
         : []),
@@ -355,15 +434,53 @@ export default function LoansManagementPage() {
         </>
       )}
 
-      <ConfirmDialog
+      {/*
+        This modal is shared by two different flows: a librarian returning a book
+        that was simply handed back at the desk (ACTIVE/OVERDUE), and confirming a
+        book a member already marked as "returned" from their own account
+        (RETURN_REQUESTED). Either way, this is where the loan actually gets closed -
+        a member's return request on its own doesn't finalize anything until staff
+        pick a condition here.
+      */}
+      <Modal
         open={Boolean(returnTarget)}
-        title="Return this book?"
-        description={`Mark "${returnTarget ? bookTitleById.get(returnTarget.bookId) ?? 'this book' : ''}" as returned by ${returnTarget ? borrowerLabel(returnTarget.userId) : ''}?`}
-        confirmLabel="Return"
-        isLoading={Boolean(busyLoanId) && busyLoanId === returnTarget?.id}
-        onConfirm={handleReturn}
-        onCancel={() => setReturnTarget(null)}
-      />
+        onClose={() => setReturnTarget(null)}
+        title={
+          returnTarget?.status === 'RETURN_REQUESTED' ? 'Confirm this return' : 'Return this book'
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-slate-600">
+            {`"${returnTarget ? bookTitleById.get(returnTarget.bookId) ?? 'this book' : ''}" returned by ${returnTarget ? borrowerLabel(returnTarget.userId) : ''}. What condition is it in?`}
+          </p>
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={() => handleReturn('GOOD')}
+              isLoading={Boolean(busyLoanId) && busyLoanId === returnTarget?.id}
+            >
+              Good condition - return as normal
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleReturn('DAMAGED')}
+              isLoading={Boolean(busyLoanId) && busyLoanId === returnTarget?.id}
+            >
+              Damaged - close loan &amp; charge replacement fee
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleReturn('LOST')}
+              isLoading={Boolean(busyLoanId) && busyLoanId === returnTarget?.id}
+            >
+              Lost - close loan &amp; charge replacement fee
+            </Button>
+          </div>
+          <p className="text-xs text-slate-400">
+            Marking a book lost or damaged permanently removes one copy from the catalogue and adds a
+            replacement fee to what this member owes.
+          </p>
+        </div>
+      </Modal>
 
       <ConfirmDialog
         open={Boolean(payFineTarget)}
@@ -377,6 +494,21 @@ export default function LoansManagementPage() {
         isLoading={isPayingFine}
         onConfirm={handlePayFine}
         onCancel={() => setPayFineTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Delete this loan record?"
+        description={
+          deleteTarget
+            ? `Permanently delete the loan of "${bookTitleById.get(deleteTarget.bookId) ?? 'this book'}" by ${borrowerLabel(deleteTarget.userId)}? This removes the record entirely and can't be undone - it's meant for correcting a mistaken entry, not for processing a real return.`
+            : ''
+        }
+        confirmLabel="Delete"
+        danger
+        isLoading={isDeleting}
+        onConfirm={handleDeleteLoan}
+        onCancel={() => setDeleteTarget(null)}
       />
 
       <Modal

@@ -47,6 +47,10 @@ function monthKey(value: string): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`
 }
 
+// A member's personal view of the activity/engagement/fines analytics that
+// librarians and admins see for everyone - computed client-side from the member's
+// own loans/reservations/favourites (see the categorize() note above) since the
+// full analytics endpoint requires a permission members don't have.
 export default function MyAnalyticsPage() {
   const { hasPermission } = useAuth()
   const canViewOwnLoans = hasPermission(Permission.VIEW_OWN_LOANS)
@@ -276,7 +280,16 @@ export default function MyAnalyticsPage() {
                         {fineBookTitleById.get(loan.bookId) ?? 'Unknown book'}
                       </p>
                       <p className="truncate text-xs text-slate-400">
-                        {loan.status === 'RETURNED' ? 'Returned' : 'Still out'} · Due {formatDate(loan.dueAt)}
+                        {loan.status === 'ACTIVE' || loan.status === 'OVERDUE'
+                          ? 'Still out'
+                          : loan.status === 'RETURN_REQUESTED'
+                            ? 'Return requested'
+                            : loan.status === 'LOST'
+                              ? 'Lost'
+                              : loan.status === 'DAMAGED'
+                                ? 'Damaged'
+                                : 'Returned'}{' '}
+                        · Due {formatDate(loan.dueAt)}
                       </p>
                     </div>
                     <span className="shrink-0 font-medium text-red-600">{formatFine(loan.fineAmount)}</span>

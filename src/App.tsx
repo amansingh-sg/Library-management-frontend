@@ -35,6 +35,7 @@ export default function App() {
       <AuthProvider>
         <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
         <Routes>
+          {/* Public routes (login/register/etc.) - no auth required */}
           <Route element={<AuthLayout />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
@@ -43,6 +44,9 @@ export default function App() {
             <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
           </Route>
 
+          {/* Everything below requires a logged-in user (ProtectedRoute). Routes further
+              wrapped in RequirePermission additionally require one of the listed
+              permissions - see RequirePermission.tsx and AuthContext's hasPermission. */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/" element={<DashboardPage />} />

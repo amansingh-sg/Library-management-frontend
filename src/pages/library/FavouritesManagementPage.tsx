@@ -14,6 +14,11 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { Pagination } from '@/components/ui/Pagination'
+import { Modal } from '@/components/ui/Modal'
+
+// Inline members shown before collapsing the rest behind "+N more" - keeps the column
+// readable for a handful of favourites without truncating the common case.
+const INLINE_MEMBER_LIMIT = 3
 import { Role } from '@/types/enums'
 import type { AdminUser, Book, Favourite } from '@/types/models'
 
@@ -50,6 +55,10 @@ async function getAllFavouritesUnpaged(): Promise<Favourite[]> {
   return pages.flat()
 }
 
+// Staff/librarian-facing view of which books members have favourited, grouped by
+// book rather than listed as individual favourite rows. On mount it loads every
+// favourite row (paged through in full, see getAllFavouritesUnpaged above),
+// alongside the full book and user lists needed to resolve titles and names.
 export default function FavouritesManagementPage() {
   const [favourites, setFavourites] = useState<Favourite[]>([])
   const [bookById, setBookById] = useState<Map<string, Book>>(new Map())
@@ -59,6 +68,9 @@ export default function FavouritesManagementPage() {
   const [pageNumber, setPageNumber] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const [membersModalRow, setMembersModalRow] = useState<BookFavourites | null>(null)
+  const [membersSearch, setMembersSearch] = useState('')
 
   const load = useCallback(() => {
     setIsLoading(true)
@@ -149,6 +161,22 @@ export default function FavouritesManagementPage() {
     setPageNumber(1)
   }, [search, sortValue])
 
+  const filteredModalMembers = useMemo(() => {
+    if (!membersModalRow) return []
+    const term = membersSearch.trim().toLowerCase()
+    if (!term) return membersModalRow.members
+    return membersModalRow.members.filter(
+      (member) =>
+        `${member.firstName} ${member.lastName}`.toLowerCase().includes(term) ||
+        member.email.toLowerCase().includes(term),
+    )
+  }, [membersModalRow, membersSearch])
+
+  function openMembersModal(row: BookFavourites) {
+    setMembersSearch('')
+    setMembersModalRow(row)
+  }
+
   const totalRows = filteredBookFavourites.length
   const lastPage = Math.max(1, Math.ceil(totalRows / PAGE_SIZE))
   const currentPage = Math.min(pageNumber, lastPage)
@@ -176,21 +204,36 @@ export default function FavouritesManagementPage() {
     },
     {
       header: 'Favourited by',
-      accessor: (row) =>
-        row.members.length === 0 ? (
-          <span className="text-slate-400">No one yet</span>
-        ) : (
+      accessor: (row) => {
+        if (row.members.length === 0) {
+          return <span className="text-slate-400">No one yet</span>
+        }
+
+        const shown = row.members.slice(0, INLINE_MEMBER_LIMIT)
+        const remaining = row.members.length - shown.length
+
+        return (
           <div className="flex max-w-md flex-wrap items-center gap-x-1.5 gap-y-1">
-            {row.members.map((member, index) => (
+            {shown.map((member, index) => (
               <span key={member.id} className="text-slate-700">
                 <span title={member.email}>
                   {member.firstName} {member.lastName}
                 </span>
-                {index < row.members.length - 1 && <span className="text-slate-400">,</span>}
+                {(index < shown.length - 1 || remaining > 0) && <span className="text-slate-400">,</span>}
               </span>
             ))}
+            {remaining > 0 && (
+              <button
+                type="button"
+                onClick={() => openMembersModal(row)}
+                className="font-medium text-brand-600 hover:text-brand-700 hover:underline"
+              >
+                +{remaining} more…
+              </button>
+            )}
           </div>
-        ),
+        )
+      },
       className: 'whitespace-normal',
     },
   ]
@@ -251,6 +294,38 @@ export default function FavouritesManagementPage() {
           <Pagination page={paginationInfo} onPageChange={setPageNumber} isLoading={isLoading} />
         </>
       )}
+
+      <Modal
+        open={membersModalRow !== null}
+        onClose={() => setMembersModalRow(null)}
+        title={membersModalRow ? `Favourited by — "${membersModalRow.title}"` : 'Favourited by'}
+      >
+        <div className="flex flex-col gap-3">
+          <Input
+            placeholder="Search by name or email…"
+            value={membersSearch}
+            onChange={(e) => setMembersSearch(e.target.value)}
+            name="favourite-members-search"
+          />
+          <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-200">
+            {filteredModalMembers.length === 0 ? (
+              <p className="px-4 py-6 text-center text-sm text-slate-400">No matching members</p>
+            ) : (
+              filteredModalMembers.map((member) => (
+                <div
+                  key={member.id}
+                  className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5 text-sm last:border-b-0"
+                >
+                  <span className="font-medium text-slate-800">
+                    {member.firstName} {member.lastName}
+                  </span>
+                  <span className="text-slate-400">{member.email}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

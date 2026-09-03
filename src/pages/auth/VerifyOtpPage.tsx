@@ -11,6 +11,9 @@ interface LocationState {
   email?: string
 }
 
+// Public page shown right after registration. The user enters the 6-digit code
+// emailed to them; submitting it successfully is the actual moment they become
+// logged in (the session token is issued here, not at register time).
 export default function VerifyOtpPage() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -38,6 +41,8 @@ export default function VerifyOtpPage() {
     setIsVerifying(true)
     try {
       const result = await authApi.verifyRegistrationOtp(email.trim(), otp.trim())
+      // This is where the session actually begins: tokens are issued on OTP
+      // verification, not at registration.
       setSession(result.token)
       toast.success('Email verified! Redirecting…')
       // Full reload so AuthContext re-initializes from the freshly-set token,

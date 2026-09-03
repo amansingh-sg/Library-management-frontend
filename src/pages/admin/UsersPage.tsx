@@ -45,6 +45,10 @@ const SORT_OPTIONS: SortOption[] = [
   { value: 'isActive-asc', label: 'Deactivated accounts first', sortBy: 'isActive', sortOrder: 'ASC' },
 ]
 
+// Admin-facing page for managing member accounts: viewing all users, creating new
+// accounts, changing roles, and activating/deactivating accounts. Requires
+// CREATE_USERS/MANAGE_USERS-level permissions to act; on mount it loads the current
+// page of users.
 export default function UsersPage() {
   const { hasPermission, user: currentUser } = useAuth()
   const canManageRoles = hasPermission(Permission.MANAGE_USERS)
@@ -387,7 +391,7 @@ export default function UsersPage() {
             value={newUser.password}
             onChange={(e) => setNewUser((u) => ({ ...u, password: e.target.value }))}
           />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               label="First name"
               value={newUser.firstName}

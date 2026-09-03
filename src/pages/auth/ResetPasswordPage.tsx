@@ -8,6 +8,9 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { getErrorMessage } from '@/api/client'
 import * as authApi from '@/api/auth.api'
 
+// Public page reached from the password-reset email link (`/reset-password/:token`).
+// Lets the user set a new password using the token in the URL; shows an error state
+// if the token is missing entirely.
 export default function ResetPasswordPage() {
   const { token } = useParams<{ token: string }>()
   const navigate = useNavigate()

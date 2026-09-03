@@ -16,6 +16,9 @@ interface TableProps<T> {
 
 export function Table<T>({ columns, data, rowKey, onRowClick }: TableProps<T>) {
   return (
+    // overflow-x-auto + min-w-max below is deliberate: on a narrow screen the table
+    // scrolls horizontally within this box instead of squashing columns or breaking
+    // the page layout.
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full min-w-max border-collapse text-left text-sm">
         <thead>

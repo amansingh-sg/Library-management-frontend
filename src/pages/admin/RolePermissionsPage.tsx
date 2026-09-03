@@ -7,7 +7,7 @@ import { Permission, Role, getRoleChain } from '@/types/enums'
 import type { AdminUser, EffectivePermission } from '@/types/models'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
-import { Select } from '@/components/ui/Select'
+import { Combobox } from '@/components/ui/Combobox'
 import { cn } from '@/utils/cn'
 
 interface PermissionGroup {
@@ -51,6 +51,12 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number]['key']
 
+// Admin-only page for managing permissions, split into two distinct editing modes:
+// "Individual Users" sets a one-off override for a single person (grant or revoke a
+// permission just for them, without touching their role), while "Role Defaults"
+// edits what every user of a given role gets by default. This distinction matters
+// because a user's effective permissions are role defaults plus their own overrides
+// layered on top - the two tabs below are UserPermissionsPanel and RoleDefaultsPanel.
 export default function RolePermissionsPage() {
   const [tab, setTab] = useState<Tab>('users')
 
@@ -196,19 +202,19 @@ function UserPermissionsPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="max-w-xs">
-        <Select
+      <div className="max-w-sm">
+        <Combobox
           label="User"
-          name="permission-user"
+          placeholder="Search members by name or email…"
           value={selectedUserId}
-          onChange={(e) => setSelectedUserId(e.target.value)}
-        >
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.firstName} {user.lastName} — {user.email} ({user.role})
-            </option>
-          ))}
-        </Select>
+          onChange={setSelectedUserId}
+          options={users.map((user) => ({
+            value: user.id,
+            label: `${user.firstName} ${user.lastName} (${user.role})`,
+            sublabel: user.email,
+          }))}
+          emptyMessage="No matching users"
+        />
       </div>
 
       {selectedUser?.role === Role.SUPER_ADMIN && (

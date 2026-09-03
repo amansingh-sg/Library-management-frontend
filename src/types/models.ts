@@ -123,11 +123,17 @@ export interface Loan {
   status: LoanStatus
   createdAt: string
   updatedAt: string
+  // Set when a member (or self-service STAFF) requests a return - null for a desk
+  // return a librarian/admin finalised directly. See LoansService.returnLoan.
+  returnRequestedAt: string | null
   // What's still OUTSTANDING - accrues while overdue and unreturned, frozen at
-  // whatever it was on the day it was returned, minus anything already recorded as
-  // paid (finePaidAmount). 0 if never overdue or fully paid. See
-  // fine-calculator.ts on the backend.
+  // whatever it was on the day it was returned, plus replacementFeeAmount, minus
+  // anything already recorded as paid (finePaidAmount). 0 if never overdue, no
+  // replacement charge, or fully paid. See fine-calculator.ts on the backend.
   fineAmount: number
+  // Only ever non-zero for a LOST/DAMAGED loan - the flat charge added when a
+  // librarian/admin finalises it that way, already folded into fineAmount above.
+  replacementFeeAmount: number
   // Cumulative amount recorded as paid via the librarian/admin "mark as paid"
   // action (see LoansService.payFine) - not itself the outstanding balance, see
   // fineAmount above for that.

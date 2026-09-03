@@ -12,6 +12,9 @@ interface LocationState {
   from?: { pathname: string }
 }
 
+// Public sign-in page. Validates email/password client-side, then hands off to
+// AuthContext's login(); on success redirects back to wherever the user was headed
+// (or home) via the router location state.
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()

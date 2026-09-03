@@ -15,6 +15,14 @@ export async function login(payload: LoginPayload): Promise<AuthSession> {
   return data
 }
 
+// POST /refresh-token -> 200 { token }. Exchanges the long-lived refresh token
+// (issued at login, valid 7 days) for a new 15-minute access token, so the user
+// doesn't get bounced to /login every time the access token expires.
+export async function refreshAccessToken(refreshToken: string): Promise<{ token: string }> {
+  const { data } = await apiClient.post<{ token: string }>('/refresh-token', { refreshToken })
+  return data
+}
+
 // POST /verify-registration-otp -> 200 { id, email, token, message }. The 6-digit
 // code emailed at registration - rate-limited 10 req/15min (brute-force guard).
 export async function verifyRegistrationOtp(

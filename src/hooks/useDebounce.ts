@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 
+// Returns `value`, but only after it has stopped changing for `delayMs`. Used to
+// delay firing a search/filter API call until the user pauses typing, instead of
+// sending a request on every keystroke.
 export function useDebounce<T>(value: T, delayMs = 500): T {
   const [debounced, setDebounced] = useState(value)
 

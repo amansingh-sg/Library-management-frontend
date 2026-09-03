@@ -28,6 +28,9 @@ const initialState: FormState = {
 
 type FieldErrors = Partial<Record<keyof Omit<FormState, 'marketing'>, string>>
 
+// Public sign-up page. Collects and validates account details, then creates the
+// account and sends the user to VerifyOtpPage — note that registering does not log
+// the user in; that only happens once they verify the OTP.
 export default function RegisterPage() {
   const { register } = useAuth()
   const navigate = useNavigate()
@@ -84,7 +87,7 @@ export default function RegisterPage() {
       <p className="mt-1 text-sm text-slate-500">Join the library to start borrowing books.</p>
 
       <form onSubmit={handleSubmit} noValidate className="mt-6 flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
             label="First name"
             name="firstName"

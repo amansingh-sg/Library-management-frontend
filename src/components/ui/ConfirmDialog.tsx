@@ -12,6 +12,9 @@ interface ConfirmDialogProps {
   onCancel: () => void
 }
 
+// Thin wrapper around Modal for the common "are you sure?" case - a yes/no prompt
+// before a destructive or irreversible action (set `danger` to render the confirm
+// button in red).
 export function ConfirmDialog({
   open,
   title,

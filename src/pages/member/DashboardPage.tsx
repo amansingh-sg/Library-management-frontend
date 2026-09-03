@@ -55,6 +55,8 @@ interface QuickLink {
   hint: string
 }
 
+// Landing page after login. Librarians/admins are redirected to the library-wide
+// dashboard; everyone else (members, staff) sees MemberDashboard below.
 export default function DashboardPage() {
   const { user, hasPermission } = useAuth()
 
@@ -68,6 +70,8 @@ export default function DashboardPage() {
   return <MemberDashboard hasPermission={hasPermission} user={user} />
 }
 
+// The personal dashboard: loans, reservations, favourites count and a short list of
+// available books, all fetched in parallel on mount (see loadDashboard below).
 function MemberDashboard({
   hasPermission,
   user,
@@ -112,7 +116,11 @@ function MemberDashboard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(loadDashboard, [canViewOwnLoans, canViewOwnReservations])
 
-  const activeLoans = loans.filter((l) => l.status !== 'RETURNED')
+  // "Currently borrowed" excludes every closed-out state, not just RETURNED - a
+  // LOST/DAMAGED loan is just as closed, the member no longer has the book.
+  const activeLoans = loans.filter(
+    (l) => l.status !== 'RETURNED' && l.status !== 'LOST' && l.status !== 'DAMAGED',
+  )
   const overdueLoans = loans.filter((l) => l.status === 'OVERDUE')
   const dueSoonLoans = loans.filter(isDueSoon)
   const activeReservations = reservations.filter(

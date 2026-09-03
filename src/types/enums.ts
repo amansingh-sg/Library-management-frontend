@@ -58,7 +58,7 @@ export type ReservationStatus = (typeof ReservationStatus)[keyof typeof Reservat
 
 // Backend loan.status column is only ACTIVE|RETURNED; LoansService derives OVERDUE
 // client-side-visible-only on list/get responses (see loans.service.ts:getLoanStatus).
-export type LoanStatus = 'ACTIVE' | 'RETURNED' | 'OVERDUE'
+export type LoanStatus = 'ACTIVE' | 'RETURNED' | 'OVERDUE' | 'RETURN_REQUESTED' | 'LOST' | 'DAMAGED'
 
 // Each role's OWN default permissions (not cumulative) — mirrors the base grants seeded
 // by migration 1787900000003-ReintroduceStaffRole.ts. Roles are cumulative by

@@ -8,6 +8,9 @@ import * as authApi from '@/api/auth.api'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+// Public page for requesting a password reset email. Shows the same "check your
+// email" confirmation regardless of whether the address is registered, since the
+// API deliberately doesn't reveal that either.
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | undefined>()

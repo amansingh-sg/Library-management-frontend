@@ -21,7 +21,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useAuth } from '@/hooks/useAuth'
 import { useDebounce } from '@/hooks/useDebounce'
-import { Permission } from '@/types/enums'
+import { Permission, Role } from '@/types/enums'
 import { SEED_CATEGORIES, getCategoryName } from '@/types/seed-categories'
 import { cn } from '@/utils/cn'
 import type { Author, Book, PaginatedResponse } from '@/types/models'
@@ -48,11 +48,17 @@ const SORT_OPTIONS: SortOption[] = [
   { value: 'publishedYear-desc', label: 'Publication year (newest)', sortBy: 'publishedYear', sortOrder: 'DESC' },
   { value: 'publishedYear-asc', label: 'Publication year (oldest)', sortBy: 'publishedYear', sortOrder: 'ASC' },
   { value: 'availableCopies-desc', label: 'Most available copies', sortBy: 'availableCopies', sortOrder: 'DESC' },
+  { value: 'availableCopies-asc', label: 'Fewest available copies', sortBy: 'availableCopies', sortOrder: 'ASC' },
 ]
 
+// Book catalogue, browsable by everyone. Staff/librarians/admins with MANAGE_BOOKS
+// also get add/restock/delete actions here; members get a favourite toggle instead.
 export default function BooksPage() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, hasRole } = useAuth()
   const canManageBooks = hasPermission(Permission.MANAGE_BOOKS)
+  // Favouriting is a patron action - staff, librarians, and admins don't get a heart
+  // button at all (matches the backend's role check in FavouriteService.addFavourite).
+  const canFavourite = hasRole(Role.MEMBER)
 
   const [page, setPage] = useState<PaginatedResponse<Book> | null>(null)
   const [pageNumber, setPageNumber] = useState(1)
@@ -94,6 +100,8 @@ export default function BooksPage() {
 
   const books = page?.data ?? []
 
+  // 500ms debounce so a search request isn't fired on every keystroke - only once
+  // typing pauses.
   const debouncedSearch = useDebounce(search, 500)
 
   const authorNameById = useMemo(() => new Map(authors.map((a) => [a.id, a.name])), [authors])
@@ -316,15 +324,17 @@ export default function BooksPage() {
         const isFavourite = favouriteBookIds.has(book.id)
         return (
           <div className="flex items-center justify-end gap-1">
-            <button
-              type="button"
-              onClick={() => handleToggleFavourite(book)}
-              disabled={busyFavouriteId === book.id}
-              aria-label={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
-              className="inline-flex size-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:text-red-500 disabled:opacity-50"
-            >
-              <Heart className={cn('size-4', isFavourite && 'fill-red-500 text-red-500')} />
-            </button>
+            {canFavourite && (
+              <button
+                type="button"
+                onClick={() => handleToggleFavourite(book)}
+                disabled={busyFavouriteId === book.id}
+                aria-label={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
+                className="inline-flex size-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:text-red-500 disabled:opacity-50"
+              >
+                <Heart className={cn('size-4', isFavourite && 'fill-red-500 text-red-500')} />
+              </button>
+            )}
             {canManageBooks && (
               <button
                 type="button"
@@ -493,7 +503,7 @@ export default function BooksPage() {
               </option>
             ))}
           </Select>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               label="Published year"
               type="number"

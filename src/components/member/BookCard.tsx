@@ -23,6 +23,8 @@ export function BookCard({ book, authorName, isFavourite, onToggleFavourite, fav
         <button
           type="button"
           onClick={(e) => {
+            // This button sits inside the card's <Link>, so stop the click from
+            // bubbling up and navigating to the book detail page.
             e.preventDefault()
             e.stopPropagation()
             onToggleFavourite(book)

@@ -43,9 +43,14 @@ function NavSection({ title, items }: { title?: string; items: NavItem[] }) {
 export function Sidebar({ open, onClose }: SidebarProps) {
   return (
     <>
+      {/* Mobile-only dimmed backdrop; tapping it closes the drawer. Hidden at lg+
+          where the sidebar is always visible inline. */}
       {open && (
         <div className="fixed inset-0 z-30 bg-slate-950/50 lg:hidden" onClick={onClose} aria-hidden="true" />
       )}
+      {/* Mobile-drawer mechanism: the sidebar is fixed off-screen and slid in with
+          translate-x based on `open`. At lg+ it's static and always translate-x-0,
+          i.e. permanently docked instead of a drawer. */}
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-slate-900 px-3 py-4 transition-transform lg:static lg:translate-x-0',

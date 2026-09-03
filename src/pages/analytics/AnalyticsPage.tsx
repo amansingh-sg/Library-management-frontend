@@ -115,6 +115,11 @@ function SectionCard({ title, children }: { title: string; children: React.React
   )
 }
 
+// Library-wide analytics dashboard for staff/librarians/admins. Member engagement
+// and overdue-loan sections are gated separately (MANAGE_USERS / MANAGE_LOANS), so
+// what's visible depends on the viewer's permissions. On mount it fires off every
+// section's data fetch in parallel via useSectionData below rather than one after
+// another, so a slow endpoint doesn't hold up the others' sections from rendering.
 export default function AnalyticsPage() {
   const { hasPermission } = useAuth()
   const canViewMembers = hasPermission(Permission.MANAGE_USERS)
@@ -126,6 +131,11 @@ export default function AnalyticsPage() {
   const [memberSortValue, setMemberSortValue] = useState(MEMBER_SORT_OPTIONS[0].value)
   const [overdueSortValue, setOverdueSortValue] = useState(OVERDUE_SORT_OPTIONS[0].value)
 
+  // Each section below loads independently (its own loading/error state via
+  // useSectionData) rather than one combined fetch, so one slow or failing endpoint
+  // doesn't block the rest of the page. borrowingTrends/reservationTrends both list
+  // `period` as a dependency, so changing the Daily/Weekly/Monthly selector
+  // re-triggers just those two queries - the rest of the page is unaffected.
   const summary = useSectionData(getDashboardSummary, [])
   const bookAnalytics = useSectionData(() => getBookAnalytics(10), [])
   const borrowingTrends = useSectionData(() => getBorrowingTrends(period), [period])

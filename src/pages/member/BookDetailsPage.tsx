@@ -23,6 +23,9 @@ import { formatDate } from '@/utils/format'
 import { cn } from '@/utils/cn'
 import type { Author, Book, Loan } from '@/types/models'
 
+// Single book's detail view (`/books/:id`). Lets self-service members borrow,
+// reserve, or favourite the book, and lets staff with MANAGE_LOANS see who currently
+// has it borrowed.
 export default function BookDetailsPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -35,6 +38,9 @@ export default function BookDetailsPage() {
   // handling, so it's still a self-service borrower like MEMBER.
   const isSelfServiceMember = hasRole(Role.MEMBER) || hasRole(Role.STAFF)
   const canViewBorrowers = hasPermission(Permission.MANAGE_LOANS)
+  // Favouriting is a patron action - staff, librarians, and admins don't get a heart
+  // button at all (matches the backend's role check in FavouriteService.addFavourite).
+  const canFavourite = hasRole(Role.MEMBER)
 
   const [book, setBook] = useState<Book | null>(null)
   const [author, setAuthor] = useState<Author | null>(null)
@@ -179,15 +185,17 @@ export default function BookDetailsPage() {
                 {author?.name ?? 'Unknown author'}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleToggleFavourite}
-              disabled={isTogglingFavourite}
-              aria-label={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
-              className="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition-colors hover:text-red-500 disabled:opacity-50"
-            >
-              <Heart className={cn('size-5', isFavourite && 'fill-red-500 text-red-500')} />
-            </button>
+            {canFavourite && (
+              <button
+                type="button"
+                onClick={handleToggleFavourite}
+                disabled={isTogglingFavourite}
+                aria-label={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
+                className="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition-colors hover:text-red-500 disabled:opacity-50"
+              >
+                <Heart className={cn('size-5', isFavourite && 'fill-red-500 text-red-500')} />
+              </button>
+            )}
           </div>
 
           {author?.bio && <p className="text-sm text-slate-600">{author.bio}</p>}
@@ -217,6 +225,8 @@ export default function BookDetailsPage() {
 
           {isSelfServiceMember && (
             <div className="flex flex-wrap items-center gap-3">
+              {/* Borrow is only possible while a copy is actually available; once copies
+                  run out the only option is to join the reservation queue below. */}
               {canBorrow && (
                 <Button onClick={() => setBorrowOpen(true)} disabled={!available}>
                   Borrow this book

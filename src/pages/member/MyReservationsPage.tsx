@@ -55,6 +55,8 @@ const STATUS_OPTIONS: { value: ReservationStatus | ''; label: string }[] = [
   { value: ReservationStatus.EXPIRED, label: 'Expired' },
 ]
 
+// Paginated list of the current member's reservations. Lets them collect a book
+// once it's READY, or cancel a reservation while it's still waiting or ready.
 export default function MyReservationsPage() {
   const [page, setPage] = useState<PaginatedResponse<Reservation> | null>(null)
   const [pageNumber, setPageNumber] = useState(1)
